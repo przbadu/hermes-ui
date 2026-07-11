@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#
+# bin/prod - zero-setup production runner.
+#
+# Installs dependencies, builds the static bundle, and serves it FROM the
+# gateway itself (via HERMES_WEB_DIST) so the app is same-origin with the
+# gateway. This is the reliable path for gated / OAuth gateways: the login
+# redirect returns to the same origin the app was served from, so cookies and
+# the WebSocket ticket flow just work.
+#
+# Any arguments are passed straight through to 'hermes serve', so you control
+# the bind host and port, e.g.:
+#   bin/prod
+#   bin/prod --host 0.0.0.0 --port 9119
+#
+# Note: if a gateway is already listening on the target port, stop it first or
+# pass a different port - two gateways cannot share one port.
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP="$ROOT/app"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "error: bun is not installed. Install it from https://bun.sh and re-run." >&2
+  exit 1
+fi
+if ! command -v hermes >/dev/null 2>&1; then
+  echo "error: the 'hermes' CLI is not on PATH. Install the Hermes agent first." >&2
+  exit 1
+fi
+
+cd "$APP"
+
+if [ ! -d node_modules ] || [ bun.lock -nt node_modules ]; then
+  echo "Installing dependencies (bun install)..."
+  bun install
+fi
+
+echo "Building the static bundle..."
+bun run build
+
+# Delegate the actual serving to the shared launcher, which validates dist/,
+# exports the absolute HERMES_WEB_DIST, and execs 'hermes serve'.
+echo "Serving the built bundle from the gateway..."
+exec "$ROOT/scripts/serve-on-gateway.sh" "$@"

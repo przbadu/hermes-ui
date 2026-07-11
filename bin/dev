@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#
+# bin/dev - zero-setup development runner.
+#
+# Installs dependencies if needed, then starts the Vite dev server with a live
+# proxy to a running Hermes gateway. The browser only ever talks to the Vite
+# origin (http://127.0.0.1:5174), so REST, auth, and the WebSocket stay
+# same-origin, which is what the gateway requires.
+#
+# Usage:
+#   bin/dev                                  # proxy to http://127.0.0.1:9119
+#   HERMES_GATEWAY_URL=http://host:port bin/dev
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP="$ROOT/app"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "error: bun is not installed. Install it from https://bun.sh and re-run." >&2
+  exit 1
+fi
+
+export HERMES_GATEWAY_URL="${HERMES_GATEWAY_URL:-http://127.0.0.1:9119}"
+
+cd "$APP"
+
+# Install only when the tree is missing or the lockfile is newer than the
+# installed modules, so repeat runs start instantly.
+if [ ! -d node_modules ] || [ bun.lock -nt node_modules ]; then
+  echo "Installing dependencies (bun install)..."
+  bun install
+fi
+
+# Soft reachability check - a dev server is still useful without the gateway,
+# so this only warns.
+if ! curl -sf -o /dev/null --max-time 2 "$HERMES_GATEWAY_URL/api/status" 2>/dev/null; then
+  echo "warning: no gateway responding at $HERMES_GATEWAY_URL/api/status" >&2
+  echo "         start one with 'hermes serve', or set HERMES_GATEWAY_URL." >&2
+fi
+
+echo
+echo "Gateway proxied from: $HERMES_GATEWAY_URL"
+echo "Open the app at:      http://127.0.0.1:5174"
+echo
+exec bun run dev
