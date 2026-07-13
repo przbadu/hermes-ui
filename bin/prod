@@ -8,10 +8,10 @@
 # redirect returns to the same origin the app was served from, so cookies and
 # the WebSocket ticket flow just work.
 #
-# Any arguments are passed straight through to 'hermes serve', so you control
-# the bind host and port, e.g.:
+# Any arguments are passed straight through to 'hermes serve', so you can
+# change the port, e.g.:
 #   bin/prod
-#   bin/prod --host 0.0.0.0 --port 9119
+#   bin/prod --port 9200
 #
 # Note: if a gateway is already listening on the target port, stop it first or
 # pass a different port - two gateways cannot share one port.

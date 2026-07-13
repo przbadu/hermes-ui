@@ -34,9 +34,11 @@ cd $HOME/dev/hermes-apps/hermes-ui
 ```
 
 `bin/dev` proxies to `http://127.0.0.1:9119` by default; override with `HERMES_GATEWAY_URL=http://host:port ./bin/dev`.
-`bin/prod` passes any extra arguments through to `hermes serve`, for example `./bin/prod --host 0.0.0.0 --port 9200`.
+`bin/prod` passes any extra arguments through to `hermes serve`, for example `./bin/prod --port 9200`.
 
 For gateways using OAuth, prefer `bin/prod`: the login redirect must return to the same origin the app was served from, which the gateway-hosted path guarantees.
+
+The gateway is meant to run on loopback (`127.0.0.1`, the default). Run the UI and the gateway on the same machine and reach it at `127.0.0.1`.
 
 ## Automated setup (for Hermes / AI agents)
 
