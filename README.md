@@ -8,9 +8,7 @@ It ships no backend of its own: every request (REST, auth, and the WebSocket) go
 
 A short walkthrough of the UI running against a Hermes gateway — login, chat, the model picker, themes, and settings.
 
-<video src="https://github.com/przbadu/hermes-ui/raw/main/assets/hermes-ui-demo.mp4" controls muted width="100%"></video>
-
-> If the player above does not render (some Markdown viewers do not support inline video), [watch or download the demo directly](assets/hermes-ui-demo.mp4).
+https://github.com/user-attachments/assets/9d45bc37-b77a-4278-91cd-3c91af837689
 
 For the extraction plan and provenance, see:
 
