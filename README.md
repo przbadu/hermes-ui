@@ -39,7 +39,7 @@ cd /home/przbadu/dev/hermes-apps/hermes-ui
 For gateways using OAuth, prefer `bin/prod`: the login redirect must return to the same origin the app was served from, which the gateway-hosted path guarantees.
 
 > [!WARNING]
-> Keep the gateway bound to loopback (`127.0.0.1`, the default). Do not bind it to `0.0.0.0`: that exposes the gateway to every device on your network, and the gateway injects a valid session token into `index.html`, so anyone who can reach the port can load the UI already authenticated. To use the UI from another device, put both machines on a [Tailscale](https://tailscale.com) network and reach the gateway over its private Tailscale address instead of a public bind.
+> Keep the gateway bound to loopback (`127.0.0.1`, the default). Do not expose it to your network: the gateway injects a valid session token into `index.html`, so anyone who can reach the port can load the UI already authenticated. To use the UI from another device, put both machines on a [Tailscale](https://tailscale.com) network and reach the gateway over its private Tailscale address.
 
 ## Automated setup (for Hermes / AI agents)
 
