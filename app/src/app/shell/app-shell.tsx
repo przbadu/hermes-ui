@@ -160,7 +160,7 @@ export function AppShell({
 
   return (
     <SidebarProvider
-      className="h-screen min-h-0 flex-col bg-background"
+      className="h-[100dvh] min-h-0 flex-col bg-background"
       onOpenChange={setSidebarOpen}
       open={sidebarOpen}
       style={
@@ -168,10 +168,15 @@ export function AppShell({
           // Alias for shadcn <Sidebar> descendants. Resolves to the chat-sidebar
           // pane track via PaneShell's emitted --pane-chat-sidebar-width.
           '--sidebar-width': 'var(--pane-chat-sidebar-width)',
-          '--titlebar-height': `${TITLEBAR_HEIGHT}px`,
+          // The titlebar band and its control cluster grow/drop by the top
+          // safe-area inset so they clear a notch / status bar on mobile. env()
+          // is 0 on desktop and non-notched devices, so the band is byte-for-byte
+          // unchanged there. Every layout offset keyed on --titlebar-height then
+          // shifts panes down past the inset for free.
+          '--titlebar-height': `calc(${TITLEBAR_HEIGHT}px + var(--safe-area-top))`,
           '--titlebar-content-inset': `${titlebarContentInset}px`,
           '--titlebar-controls-left': `${titlebarControls.left}px`,
-          '--titlebar-controls-top': `${titlebarControls.top}px`,
+          '--titlebar-controls-top': `calc(${titlebarControls.top}px + var(--safe-area-top))`,
           '--titlebar-tools-right': titlebarToolsRight,
           '--titlebar-tools-width': titlebarToolsWidth,
           // Drops the right rail below the titlebar band when the OS/host paints

@@ -445,11 +445,27 @@
   html,
   body,
   #root {
-    height: 100%;
+    /* 100vh includes the mobile browser's collapsing address bar, which clips
+       the shell's bottom row; dvh tracks the visible viewport instead. On
+       desktop / Electron dvh resolves identically to vh, so this is inert there.
+       The vh line is a fallback for the rare engine without dvh. */
+    height: 100vh;
+    height: 100dvh;
     /* App shell, not a document: the window itself never scrolls on either axis
        (panes own their own scroll). Belt to the auto-scroll axis-lock in the
        sidebar reorder DnD — nothing can drag the whole shell sideways. */
     overflow: hidden;
+  }
+
+  /* Safe-area inset tokens (notch / home indicator / rounded corners). The
+     viewport meta already opts in with viewport-fit=cover (index.html); these
+     env() values are 0 on desktop and non-notched devices, so consumers can
+     reference them unconditionally without a mobile branch. */
+  :root {
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
   }
 
   html {
