@@ -22,10 +22,9 @@ The native branch is guarded by `isNativePlatform()` (from `@/lib/native-platfor
 
 ## Prerequisites
 
-None of these are present in the CI/dev container this scaffold was generated in, so the steps below are for a real developer machine.
-
 - A JDK.
-  JDK 17 is the baseline (Java 17 is what the Capacitor 8 Android template targets).
+  JDK **21** is required, not 17: Capacitor 8's Android libraries compile against source release 21, and building on JDK 17 fails with `error: invalid source release: 21`.
+  Android Studio bundles a suitable JBR 21; point `JAVA_HOME` at it (for example `/snap/android-studio/<build>/jbr`) or install a standalone JDK 21.
 - Android Studio (latest stable), which bundles the Android SDK, platform-tools, and an emulator image.
 - The Android SDK reachable via the `ANDROID_HOME` (or legacy `ANDROID_SDK_ROOT`) environment variable, or an `android/local.properties` with `sdk.dir=/path/to/Android/sdk`.
   Android Studio writes `local.properties` for you the first time you open the project.
@@ -70,9 +69,14 @@ Or from the command line, once an SDK is configured:
 
 ```sh
 cd app/android
+export JAVA_HOME=/snap/android-studio/<build>/jbr   # JDK 21 (see prerequisites)
+export ANDROID_HOME="$HOME/Android/Sdk"
 ./gradlew :app:assembleDebug          # builds app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:installDebug           # builds and installs on a connected device/emulator
 ```
+
+This debug build is VERIFIED: `assembleDebug` produces a ~20 MB `app-debug.apk` against Android SDK platform 36 with JBR 21.
+It was not installed or run, since that needs a device/emulator.
 
 For an internal-track release build you produce a signed App Bundle (`./gradlew :app:bundleRelease`) with your own keystore.
 Keystores and the `*.apk` / `*.aab` outputs are git-ignored and must never be committed.
@@ -99,8 +103,8 @@ Because REST runs through `CapacitorHttp`, the cross-origin request is not subje
 
 ## VALIDATION RISKS / TODO on real hardware
 
-This scaffold was generated in an environment with a JDK but NO Android SDK and NO device, so an APK was never built or run here.
-The items below are unverified and MUST be checked on real hardware before the M5 exit criterion (an internal-track Android build authenticating against a remote gated gateway) can be called done.
+The debug APK builds cleanly (verified, see above), but it was never installed or run - there is no device/emulator here.
+The items below are therefore unverified and MUST be checked on real hardware before the M5 exit criterion (an internal-track Android build authenticating against a remote gated gateway) can be called done.
 
 - WebSocket Origin header.
   `capacitor.config.ts` sets `androidScheme: 'https'`, which means the Android WebView loads bundled assets from `https://localhost` and will send `Origin: https://localhost` on the WS upgrade, NOT `capacitor://`.
@@ -112,6 +116,6 @@ The items below are unverified and MUST be checked on real hardware before the M
   The ws-ticket is minted over REST and is single-use with a 30s TTL, so verify a fresh ticket is minted immediately before every connect and reconnect on native just as in the browser.
 - Mobile lifecycle on native.
   Backgrounding freezes timers and can drop the socket; verify reconnect-on-resume with a fresh ticket and a resync, the same discipline the web build follows on `visibilitychange` / `pageshow` / `online`.
-- Full device build.
-  Building the APK/AAB, installing on a device or emulator, and running the end-to-end auth flow against a remote gated gateway all require the SDK and hardware absent from this dev environment.
+- Install and run on a device.
+  The debug APK compiles; installing it on a device or emulator and running the end-to-end auth flow against a remote gated gateway is the remaining half of the M5 exit criterion and needs hardware.
   Store release (Play Store) is M6, not M5.

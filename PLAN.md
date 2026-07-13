@@ -185,21 +185,23 @@ Feature-gating for the dropped capabilities (hiding or disabling the affected UI
 - Responsive collapse from the three-pane desktop shell down to a single-column mobile layout.
 - Exit: the app is genuinely usable one-handed on a phone, not just installable.
 
-### M5 - Capacitor / Android (SCAFFOLDED; hardware validation remains)
+### M5 - Capacitor / Android (BUILT; on-device validation remains)
 
 Implemented in this repo:
 
 - Added Capacitor 8 (`@capacitor/core`, `app`, `status-bar`, `keyboard`, `haptics`, `splash-screen`, plus the `cli` and `android` devDeps) and `capacitor.config.ts` (bundled assets, no `server.url`, `androidScheme: 'https'`, spinner-less splash).
 - Added a single normalized HTTP entry point (`hermesHttp` in `app/src/web-bridge/http.ts`) that routes REST through `CapacitorHttp` on native (immune to CORS/SameSite, native cookie jar) and plain same-origin `fetch` everywhere else, plus a native-platform detection module (`app/src/lib/native-platform.ts`) distinct from `web-platform.ts`.
-- Wired `bridge.ts` to route every REST call through `hermesHttp`, and relaxed the cross-origin / mixed-content guards in `gateways.ts` and the `isSameOrigin` OAuth guard only when `isNativePlatform()`, so the native build can talk to a REMOTE cross-origin gateway while browser/Electron behavior is unchanged.
-  The WS stays a plain browser `WebSocket`; only its cross-origin URL guard is relaxed on native, because the gateway's WS origin check trusts the native WebView origin.
+- Wired `bridge.ts` to route every REST call through `hermesHttp`, and relaxed the cross-origin guard in `gateways.ts` and the `isSameOrigin` OAuth guard only when `isNativePlatform()`, so the native build can talk to a REMOTE cross-origin gateway while browser/Electron behavior is unchanged.
+  The mixed-content guard is deliberately kept on native: the WS stays a plain browser `WebSocket` in the secure WebView, so a plain-http (`ws://`) gateway is still refused even though its REST probe over `CapacitorHttp` would pass.
 - Scaffolded the Android project (`app/android/`, checked in) via `cap add android`, with `cap:sync` / `cap:android` / `cap:add:android` npm scripts.
   The full runbook lives in [CAPACITOR.md](CAPACITOR.md).
+- Built the debug APK: `assembleDebug` produces a ~20 MB `app-debug.apk` against Android SDK platform 36.
+  This required JDK 21 (Capacitor 8's Android libraries compile against source release 21; JDK 17 fails), supplied by Android Studio's bundled JBR.
 
 Remaining before M5 exit:
 
-- Build the APK/AAB, install on a device or emulator, and run the end-to-end auth flow.
-  This needs the Android SDK and real hardware, which the dev/CI environment does not have, so it was not done here.
+- Install the APK on a device or emulator and run the end-to-end auth flow against a remote gated gateway.
+  The build is done; only the on-device run remains, which needs hardware.
 - Validate on real hardware the exact Origin header the WebView sends (`https://localhost` under the current `androidScheme`, not `capacitor://`) and whether the gateway WS origin check accepts it, plus that cookies persist across the native cookie jar and WS.
 - Native niceties as needed: keyboard, status bar / safe area, haptics, share intents.
 - Exit: an internal-track Android build authenticates against a remote gated gateway.
