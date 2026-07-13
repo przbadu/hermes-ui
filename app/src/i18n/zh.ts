@@ -729,6 +729,9 @@ export const zh: Translations = {
       remoteUrlDesc: '远程 dashboard 后端的基础 URL。支持路径前缀，例如 /hermes。',
       probing: '正在检查此网关的认证方式…',
       probeError: '暂时无法访问此网关。请检查 URL；网关响应后会显示认证方式。',
+      crossOriginTitle: '网关必须同源',
+      crossOriginError:
+        '浏览器只能访问由本站点提供的网关。请将其填写为由反向代理转发到该网关的 /prefix 路径，或对位于其他主机的网关使用桌面应用。此外，本 https 页面也无法访问 http 网关。',
       signedIn: '已登录',
       signIn: '登录',
       signOut: '退出登录',

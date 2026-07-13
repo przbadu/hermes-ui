@@ -2,7 +2,6 @@
 // the FIRST import — later side-effect imports read the bridge at module
 // evaluation time.
 import './web-bridge/install'
-
 import './styles.css'
 // Side-effect: applies the persisted window translucency on load.
 import './store/translucency'

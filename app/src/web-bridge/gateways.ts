@@ -90,6 +90,36 @@ export function normalizeBase(url: string): string {
   return servingBase()
 }
 
+/**
+ * Why a gateway `url` can't be reached from THIS browser, or `null` when it can.
+ *
+ * A browser tab can only talk to a SAME-ORIGIN gateway: the serving origin, a
+ * `/prefix` on it, or - in dev - an absolute URL the Vite proxy forwards to
+ * (all resolve to the serving origin via `normalizeBase`). An absolute URL on
+ * another origin is blocked before it's useful:
+ *   - `mixed-content`: an https page cannot fetch an http gateway at all.
+ *   - `cross-origin`: the gateway's CORS is localhost-only and its session
+ *     cookie is `SameSite=Lax`, so REST/WS/auth are rejected cross-origin.
+ * Unlike Electron, the browser cannot get around either. Returns a reason so the
+ * UI can explain the real cause instead of a misleading "check the URL".
+ */
+export type GatewayReachBlock = 'mixed-content' | 'cross-origin'
+
+export function classifyGatewayReach(url: string): GatewayReachBlock | null {
+  try {
+    const target = new URL(normalizeBase(url), window.location.href)
+
+    if (target.origin === window.location.origin) {return null}
+
+    if (window.location.protocol === 'https:' && target.protocol === 'http:') {return 'mixed-content'}
+
+    return 'cross-origin'
+  } catch {
+    // Unparseable input: let the normal probe/validation surface it.
+    return null
+  }
+}
+
 function newId(): string {
   try {
     return crypto.randomUUID()

@@ -30,7 +30,7 @@ import type {
   HermesNotification
 } from '@/global'
 
-import { getActiveGateway, normalizeBase, servingBase, updateGateway } from './gateways'
+import { classifyGatewayReach, getActiveGateway, normalizeBase, servingBase, updateGateway } from './gateways'
 
 declare global {
   interface Window {
@@ -456,6 +456,16 @@ export function createWebBridge(): Window['hermesDesktop'] {
     },
     probeConnectionConfig: async remoteUrl => {
       const base = normalizeBase(remoteUrl)
+
+      // A different-origin gateway is blocked by the browser (mixed content +
+      // localhost-only CORS) before the fetch is meaningful. Report the real
+      // reason via `error` so the UI explains it, instead of firing a doomed
+      // request that surfaces as a generic "could not reach".
+      const block = classifyGatewayReach(remoteUrl)
+
+      if (block) {
+        return { baseUrl: base, reachable: false, authMode: 'unknown', providers: [], version: null, error: block }
+      }
 
       try {
         const status = await fetchStatus(base)

@@ -539,6 +539,9 @@ export const en: Translations = {
       remoteUrlDesc: 'Base URL for the remote dashboard backend. Path prefixes are supported, for example /hermes.',
       probing: 'Checking how this gateway authenticates…',
       probeError: 'Could not reach this gateway yet. Check the URL — the auth method will appear once it responds.',
+      crossOriginTitle: 'Gateway must be same-origin',
+      crossOriginError:
+        "A browser can only reach a gateway served from this site. Enter it as a /prefix path routed to that gateway by your reverse proxy, or use the desktop app for a gateway on another host. An http gateway also can't be reached from this https page.",
       signedIn: 'Signed in',
       signIn: 'Sign in',
       signOut: 'Sign out',
