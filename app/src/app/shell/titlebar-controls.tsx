@@ -2,9 +2,11 @@ import { useStore } from '@nanostores/react'
 import type { ComponentProps, ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
+import { matchesQuery } from '@/hooks/use-media-query'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
@@ -14,11 +16,14 @@ import {
   $fileBrowserOpen,
   $panesFlipped,
   $sidebarOpen,
+  CHAT_SIDEBAR_PANE_ID,
+  FILE_BROWSER_PANE_ID,
   toggleFileBrowserOpen,
   togglePanesFlipped,
   toggleSidebarOpen
 } from '@/store/layout'
 
+import { SIDEBAR_COLLAPSE_MEDIA_QUERY } from '../layout-constants'
 import { appViewForPath, isOverlayView } from '../routes'
 
 import { titlebarButtonClass } from './titlebar'
@@ -71,8 +76,22 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   // swaps which pane each one toggles. Default: sessions left, file browser
   // right. Flipped: file browser left, sessions right. Sidebar toggles never
   // carry an active highlight — they're plain show/hide affordances.
-  const fileBrowserEdge = { open: fileBrowserOpen, toggle: toggleFileBrowserOpen }
-  const sessionsEdge = { open: sidebarOpen, toggle: toggleSidebarOpen }
+  //
+  // Below the collapse breakpoint both rails are force-collapsed to hover-reveal
+  // overlays, so flipping the store's `open` flag paints nothing. Mirror the
+  // `view.toggleSidebar` keybind and toggle the reveal overlay instead — that's
+  // the only thing that shows the pane while narrow (regression: the button did
+  // nothing on mobile).
+  const edgeToggle = (paneId: string, toggleOpen: () => void) => () => {
+    if (matchesQuery(SIDEBAR_COLLAPSE_MEDIA_QUERY)) {
+      window.dispatchEvent(new CustomEvent(PANE_TOGGLE_REVEAL_EVENT, { detail: { id: paneId } }))
+    } else {
+      toggleOpen()
+    }
+  }
+
+  const fileBrowserEdge = { open: fileBrowserOpen, toggle: edgeToggle(FILE_BROWSER_PANE_ID, toggleFileBrowserOpen) }
+  const sessionsEdge = { open: sidebarOpen, toggle: edgeToggle(CHAT_SIDEBAR_PANE_ID, toggleSidebarOpen) }
   const leftEdge = panesFlipped ? fileBrowserEdge : sessionsEdge
   const rightEdge = panesFlipped ? sessionsEdge : fileBrowserEdge
 
