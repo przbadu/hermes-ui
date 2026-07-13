@@ -9,6 +9,7 @@ import { AlertCircle, Check, FileText, Globe, Loader2, LogIn, Monitor } from '@/
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import { $profiles, refreshActiveProfile } from '@/store/profile'
+import { classifyGatewayReach } from '@/web-bridge/gateways'
 
 import { CONTROL_TEXT } from './constants'
 import { GatewayManager } from './gateway-manager'
@@ -290,6 +291,12 @@ export function GatewaySettings() {
   })
 
   const save = async (apply: boolean) => {
+    if (state.mode === 'remote' && classifyGatewayReach(trimmedUrl)) {
+      notify({ kind: 'warning', title: g.crossOriginTitle, message: g.crossOriginError })
+
+      return
+    }
+
     if (state.mode === 'remote' && !canUseRemote) {
       notify({
         kind: 'warning',
@@ -512,7 +519,7 @@ export function GatewaySettings() {
         {state.mode === 'remote' && probeStatus === 'error' ? (
           <div className="flex items-start gap-2 py-3 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
-            {g.probeError}
+            {probe?.error === 'cross-origin' || probe?.error === 'mixed-content' ? g.crossOriginError : g.probeError}
           </div>
         ) : null}
 

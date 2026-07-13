@@ -450,6 +450,8 @@ export interface Translations {
       remoteUrlDesc: string
       probing: string
       probeError: string
+      crossOriginTitle: string
+      crossOriginError: string
       signedIn: string
       signIn: string
       signOut: string

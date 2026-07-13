@@ -638,6 +638,9 @@ export const zhHant = defineLocale({
       remoteUrlDesc: '遠端儀表板後端的基礎 URL。支援路徑前綴，例如 /hermes。',
       probing: '正在檢查此閘道的驗證方式…',
       probeError: '暫時無法連線此閘道。請檢查 URL；閘道回應後將顯示驗證方式。',
+      crossOriginTitle: '閘道必須同源',
+      crossOriginError:
+        '瀏覽器只能連線由本網站提供的閘道。請將其填寫為由反向代理轉發到該閘道的 /prefix 路徑，或對位於其他主機的閘道使用桌面應用程式。此外，本 https 頁面也無法連線 http 閘道。',
       signedIn: '已登入',
       signIn: '登入',
       signOut: '登出',
