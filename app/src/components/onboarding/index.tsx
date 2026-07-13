@@ -228,6 +228,19 @@ export function DesktopOnboardingOverlay({ enabled, onCompleted, requestGateway 
     }
   }, [ctx, onboarding.flow.status, onboarding.manual, onboarding.providers])
 
+  // A hard boot failure (most commonly: the remote gateway needs sign-in, or
+  // is unreachable/misconfigured) is NOT an onboarding concern - onboarding
+  // picks a model provider, which requires a working gateway first. Step aside
+  // so the BootFailureOverlay drives recovery: it has the "Sign in" and
+  // "Gateway settings" actions, and once dismissed it does not cover the
+  // settings page - so the user can actually reach Settings -> Gateway to fix
+  // the connection URL. Without this, onboarding sits on top (z-1300) showing
+  // the error with no way to act on it. Manual mode (opened from a working
+  // app) implies a live gateway, so it is unaffected.
+  if (boot.error && !onboarding.manual) {
+    return null
+  }
+
   // Mount from frame 1 so we replace the boot overlay seamlessly. The
   // configured field stays null until the runtime check resolves; only then
   // do we know whether to dismiss (true) or surface the picker (false).

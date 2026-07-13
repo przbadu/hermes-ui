@@ -1262,6 +1262,21 @@ export const zhHant = defineLocale({
     failedRename: '重新命名設定檔失敗'
   },
 
+  gateways: {
+    title: '閘道',
+    active: '目前',
+    switchTo: '切換到',
+    manage: '管理閘道',
+    add: '新增閘道',
+    name: '名稱',
+    namePlaceholder: '例如：個人、公司',
+    url: '閘道 URL',
+    saved: '已儲存的閘道',
+    remove: '移除',
+    removeConfirm: '要移除此閘道連線嗎？',
+    current: '目前'
+  },
+
   cron: {
     close: '關閉排程',
     title: '排程工作',
@@ -1427,6 +1442,8 @@ export const zhHant = defineLocale({
     groupAriaUngrouped: '依工作區分組工作階段',
     showProjects: '顯示專案',
     showSessions: '顯示工作階段',
+    showCronSessions: '顯示排程工作階段',
+    hideCronSessions: '隱藏排程工作階段',
     groupTitleGrouped: '取消分組',
     groupTitleUngrouped: '依工作區分組',
     allPinned: '這裡的全部已釘選。取消釘選某個聊天即可在最近中顯示。',

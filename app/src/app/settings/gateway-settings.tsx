@@ -11,6 +11,7 @@ import { notify, notifyError } from '@/store/notifications'
 import { $profiles, refreshActiveProfile } from '@/store/profile'
 
 import { CONTROL_TEXT } from './constants'
+import { GatewayManager } from './gateway-manager'
 import { EmptyState, ListRow, LoadingState, Pill, SettingsContent } from './primitives'
 
 type Mode = 'local' | 'remote'
@@ -432,6 +433,8 @@ export function GatewaySettings() {
           {g.intro}
         </p>
       </div>
+
+      <GatewayManager />
 
       {namedProfiles.length > 0 ? (
         <div className="mb-5 grid gap-2">

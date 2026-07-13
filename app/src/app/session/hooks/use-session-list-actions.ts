@@ -8,7 +8,13 @@ import {
   normalizeSessionSource
 } from '@/lib/session-source'
 import { setCronJobs } from '@/store/cron'
-import { $pinnedSessionIds, $sessionsLimit, bumpSessionsLimit, SIDEBAR_SESSIONS_PAGE_SIZE } from '@/store/layout'
+import {
+  $pinnedSessionIds,
+  $sessionsLimit,
+  $sidebarShowCronSessions,
+  bumpSessionsLimit,
+  SIDEBAR_SESSIONS_PAGE_SIZE
+} from '@/store/layout'
 import { ALL_PROFILES, normalizeProfileKey } from '@/store/profile'
 import {
   $messagingSessions,
@@ -36,7 +42,17 @@ import { sameCronSignature } from '../../desktop-controller-utils'
 // self-managed sidebar section (refreshMessagingSessions). Excluding both here
 // keeps "Load more" paging through interactive local chats instead of
 // interleaving gateway threads that bury them.
-const SIDEBAR_EXCLUDED_SOURCES = ['cron', 'subagent', 'tool', ...MESSAGING_SESSION_SOURCE_IDS]
+// `subagent`/`tool`/messaging sources are always excluded from recents. `cron`
+// is excluded unless the SESSIONS header toggle ($sidebarShowCronSessions) is
+// on, so scheduled-job runs can be revealed on demand. Read at fetch time.
+const SIDEBAR_ALWAYS_EXCLUDED_SOURCES = ['subagent', 'tool', ...MESSAGING_SESSION_SOURCE_IDS]
+
+function sidebarExcludedSources(): string[] {
+  return $sidebarShowCronSessions.get()
+    ? SIDEBAR_ALWAYS_EXCLUDED_SOURCES
+    : ['cron', ...SIDEBAR_ALWAYS_EXCLUDED_SOURCES]
+}
+
 // The messaging slice is the inverse: drop cron + every local source so only
 // external-platform conversations remain, then split per platform in the UI.
 const MESSAGING_EXCLUDED_SOURCES = ['cron', ...LOCAL_SESSION_SOURCE_IDS]
@@ -174,7 +190,7 @@ export function useSessionListActions({ profileScope }: UseSessionListActionsArg
       const sessionProfile = profileScope === ALL_PROFILES ? 'all' : profileScope
 
       const result = await listAllProfileSessions(limit, 1, 'exclude', 'recent', sessionProfile, {
-        excludeSources: SIDEBAR_EXCLUDED_SOURCES
+        excludeSources: sidebarExcludedSources()
       })
 
       if (refreshSessionsRequestRef.current === requestId) {
@@ -206,7 +222,7 @@ export function useSessionListActions({ profileScope }: UseSessionListActionsArg
     const loaded = $sessions.get().filter(inKey).length
 
     const result = await listAllProfileSessions(loaded + SIDEBAR_SESSIONS_PAGE_SIZE, 1, 'exclude', 'recent', key, {
-      excludeSources: SIDEBAR_EXCLUDED_SOURCES
+      excludeSources: sidebarExcludedSources()
     })
 
     const keep = sessionsToKeep(key)

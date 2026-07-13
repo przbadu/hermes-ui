@@ -1509,6 +1509,21 @@ export const zh: Translations = {
     failedRename: '重命名配置档案失败'
   },
 
+  gateways: {
+    title: '网关',
+    active: '当前',
+    switchTo: '切换到',
+    manage: '管理网关',
+    add: '添加网关',
+    name: '名称',
+    namePlaceholder: '例如：个人、公司',
+    url: '网关 URL',
+    saved: '已保存的网关',
+    remove: '移除',
+    removeConfirm: '要移除此网关连接吗？',
+    current: '当前'
+  },
+
   cron: {
     close: '关闭定时任务',
     title: '定时任务',
@@ -1674,6 +1689,8 @@ export const zh: Translations = {
     groupAriaUngrouped: '按工作区分组会话',
     showProjects: '显示项目',
     showSessions: '显示会话',
+    showCronSessions: '显示定时任务会话',
+    hideCronSessions: '隐藏定时任务会话',
     groupTitleGrouped: '取消分组',
     groupTitleUngrouped: '按工作区分组',
     allPinned: '这里的全部已置顶。取消置顶某个对话即可在最近中显示。',
