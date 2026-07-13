@@ -1330,6 +1330,21 @@ export const en: Translations = {
     failedRename: 'Failed to rename profile'
   },
 
+  gateways: {
+    title: 'Gateways',
+    active: 'active',
+    switchTo: 'Switch to',
+    manage: 'Manage gateways',
+    add: 'Add gateway',
+    name: 'Name',
+    namePlaceholder: 'e.g. Personal, Company',
+    url: 'Gateway URL',
+    saved: 'Saved gateways',
+    remove: 'Remove',
+    removeConfirm: 'Remove this gateway connection?',
+    current: 'Current'
+  },
+
   cron: {
     close: 'Close cron',
     title: 'Scheduled jobs',
@@ -1496,6 +1511,8 @@ export const en: Translations = {
     groupAriaUngrouped: 'Group sessions by workspace',
     showProjects: 'Show projects',
     showSessions: 'Show sessions',
+    showCronSessions: 'Show cron job sessions',
+    hideCronSessions: 'Hide cron job sessions',
     groupTitleGrouped: 'Ungroup sessions',
     groupTitleUngrouped: 'Group by workspace',
     allPinned: 'Everything here is pinned. Unpin a chat to show it in recents.',

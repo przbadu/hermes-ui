@@ -24,45 +24,32 @@ import type {
   DesktopBootProgress,
   DesktopConnectionConfig,
   DesktopConnectionConfigInput,
+  DesktopOauthLoginResult,
   HermesApiRequest,
   HermesConnection,
   HermesNotification
 } from '@/global'
 
+import { getActiveGateway, normalizeBase, servingBase, updateGateway } from './gateways'
+
 declare global {
   interface Window {
     __HERMES_SESSION_TOKEN__?: string
     __HERMES_BASE_PATH__?: string
+    /** Dev only: the gateway origin the Vite proxy forwards to (see vite.config.ts). */
+    __HERMES_DEV_PROXY_TARGET__?: string
   }
 }
 
 const TOKEN_STORAGE_KEY = 'hermes-web.session-token'
-const CONNECTION_STORAGE_KEY = 'hermes-web.connection'
 
 const noop = (): void => {}
 const unsubscribed = (): (() => void) => noop
 
-function resolveBasePath(): string {
-  const raw = window.__HERMES_BASE_PATH__ ?? ''
-  return raw === '/' ? '' : raw.replace(/\/$/, '')
-}
-
 /**
- * The origin the app was actually served from. This is the default gateway:
- * when the bundle is hosted by the gateway (or reached through the dev proxy),
- * the served origin IS the gateway, so everything is same-origin out of the
- * box with no configuration.
- */
-function servingBase(): string {
-  return window.location.origin + resolveBasePath()
-}
-
-/**
- * The user-editable connection, persisted in the browser. This mirrors the
- * desktop's Gateway settings: the user may point the app at a remote gateway
- * URL (absolute `https://host` or a `/prefix` path on the serving origin) and
- * choose token or OAuth auth. Nothing is set by environment variables here -
- * the web build has no env, so the settings screen is always editable.
+ * The bridge always operates on the ACTIVE gateway (see `./gateways`). This is
+ * the adapter shape the connection-config methods below speak; it is derived
+ * from, and written back to, the active gateway entry.
  */
 interface StoredConnection {
   mode: 'local' | 'remote'
@@ -71,87 +58,68 @@ interface StoredConnection {
   remoteUrl: string
 }
 
-function defaultConnection(): StoredConnection {
-  return { mode: 'remote', remoteAuthMode: 'oauth', remoteToken: '', remoteUrl: servingBase() }
-}
-
 function loadStoredConnection(): StoredConnection {
-  try {
-    const raw = localStorage.getItem(CONNECTION_STORAGE_KEY)
-    if (!raw) return defaultConnection()
-    const parsed = JSON.parse(raw) as Partial<StoredConnection>
-    return {
-      mode: parsed.mode === 'local' ? 'local' : 'remote',
-      remoteAuthMode: parsed.remoteAuthMode === 'token' ? 'token' : 'oauth',
-      remoteToken: parsed.remoteToken ?? '',
-      remoteUrl: (parsed.remoteUrl ?? '').trim() || servingBase()
-    }
-  } catch {
-    return defaultConnection()
+  const gateway = getActiveGateway()
+
+  return {
+    mode: 'remote',
+    remoteAuthMode: gateway.authMode,
+    remoteToken: gateway.token ?? '',
+    remoteUrl: gateway.url || servingBase()
   }
 }
 
 function persistConnection(input: DesktopConnectionConfigInput): StoredConnection {
-  const current = loadStoredConnection()
-  const next: StoredConnection = {
-    mode: input.mode ?? current.mode,
-    remoteAuthMode: input.remoteAuthMode ?? current.remoteAuthMode,
-    // An omitted token means "leave the saved one unchanged"; an explicit
-    // empty string clears it.
-    remoteToken: input.remoteToken !== undefined ? input.remoteToken : current.remoteToken,
-    remoteUrl: (input.remoteUrl ?? current.remoteUrl).trim() || servingBase()
-  }
-  localStorage.setItem(CONNECTION_STORAGE_KEY, JSON.stringify(next))
-  return next
-}
+  updateGateway(getActiveGateway().id, {
+    ...(input.remoteAuthMode !== undefined ? { authMode: input.remoteAuthMode } : {}),
+    // An omitted token means "leave the saved one unchanged".
+    ...(input.remoteToken !== undefined ? { token: input.remoteToken } : {}),
+    ...(input.remoteUrl !== undefined ? { url: input.remoteUrl.trim() } : {})
+  })
 
-/**
- * Resolve a stored `remoteUrl` to an absolute base:
- * - `https://host[:port]` is used as-is.
- * - a `/prefix` is treated as a reverse-proxy path on the serving origin.
- * - anything else falls back to the serving origin.
- * A trailing slash is always trimmed.
- */
-function normalizeBase(remoteUrl: string): string {
-  const value = (remoteUrl || '').trim().replace(/\/+$/, '')
-  if (!value) return servingBase()
-  if (/^https?:\/\//i.test(value)) return value
-  if (value.startsWith('/')) return window.location.origin + value
-  return servingBase()
+  return loadStoredConnection()
 }
 
 function baseUrl(): string {
-  return normalizeBase(loadStoredConnection().remoteUrl)
+  return normalizeBase(getActiveGateway().url)
 }
 
 /**
  * Token resolution order: gateway HTML injection (loopback/token mode), a
  * `?token=` URL param (persisted then stripped so it never lingers in the
- * address bar), a previously persisted param token, then a token saved in the
- * connection settings. Empty string means cookie (gated/OAuth) mode.
+ * address bar), a previously persisted param token, then a token saved on the
+ * active gateway. Empty string means cookie (gated/OAuth) mode.
  */
 function resolveToken(): string {
-  if (window.__HERMES_SESSION_TOKEN__) return window.__HERMES_SESSION_TOKEN__
+  if (window.__HERMES_SESSION_TOKEN__) {return window.__HERMES_SESSION_TOKEN__}
+
   try {
     const url = new URL(window.location.href)
     const param = url.searchParams.get('token')
+
     if (param) {
       localStorage.setItem(TOKEN_STORAGE_KEY, param)
       url.searchParams.delete('token')
       window.history.replaceState(null, '', url.toString())
+
       return param
     }
+
     const stored = localStorage.getItem(TOKEN_STORAGE_KEY)
-    if (stored) return stored
+
+    if (stored) {return stored}
   } catch {
-    // fall through to the settings-provided token
+    // fall through to the active gateway's token
   }
-  const conn = loadStoredConnection()
-  return conn.remoteAuthMode === 'token' ? conn.remoteToken : ''
+
+  const gateway = getActiveGateway()
+
+  return gateway.authMode === 'token' ? (gateway.token ?? '') : ''
 }
 
 function wsBaseUrl(): string {
   const httpBase = baseUrl()
+
   return httpBase.replace(/^http/, 'ws')
 }
 
@@ -164,29 +132,125 @@ async function mintWsTicket(): Promise<string> {
     method: 'POST',
     credentials: 'same-origin'
   })
+
   if (!res.ok) {
     throw new Error(`${res.status}: failed to mint websocket ticket`)
   }
+
   const body = (await res.json()) as { ticket?: string }
-  if (!body.ticket) throw new Error('ws-ticket response had no ticket')
+
+  if (!body.ticket) {throw new Error('ws-ticket response had no ticket')}
+
   return body.ticket
 }
 
 /**
- * Gated gateways answer unauthenticated requests with a 401 envelope
- * `{"error": "unauthenticated" | "session_expired", "login_url": ...}`.
- * Redirect to the gateway login page so the cookie session gets established,
- * then the SPA reloads authenticated.
+ * True when the active gateway currently has a usable session. Token gateways
+ * are "connected" if a token is present; OAuth/cookie gateways are probed via
+ * the public-ish /api/auth/me (200 = signed in, 401 = not). Best-effort: any
+ * failure reports not-connected so the UI offers a sign-in path rather than
+ * falsely claiming a live session.
  */
-function handleUnauthenticated(text: string): void {
-  try {
-    const body = JSON.parse(text) as { error?: string; login_url?: string }
-    if (body.error === 'unauthenticated' || body.error === 'session_expired') {
-      window.location.href = body.login_url || `${baseUrl()}/login`
-    }
-  } catch {
-    // Not the auth envelope; let the caller's error handling take it.
+async function probeAuthConnected(base: string = baseUrl()): Promise<boolean> {
+  if (resolveToken()) {
+    return true
   }
+
+  try {
+    const res = await fetch(`${base}/api/auth/me`, {
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(6_000)
+    })
+
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * True when `base` shares the app's origin. OAuth in the browser only works
+ * same-origin: the gateway sets its session as an `HttpOnly; SameSite=Lax`
+ * cookie with no credentialed CORS, so the browser refuses to send it back on a
+ * cross-origin fetch/WS. Same-origin covers the zero-config default gateway and
+ * any `/prefix` gateway (both resolve to the serving origin, which the Vite dev
+ * proxy or the gateway's own static host routes through), plus production where
+ * the gateway serves the app. An absolute cross-origin URL never can.
+ */
+function isSameOrigin(base: string): boolean {
+  try {
+    return new URL(base, window.location.href).origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Browser equivalent of the desktop's `openOauthLoginWindow`: open the
+ * gateway's `/login` in a child window and poll our own (same-origin) session
+ * until it goes live, resolving `connected: true` then. The app window is never
+ * navigated away - exactly the desktop behaviour. Resolves `connected: false`
+ * if the popup is blocked, the user closes it before finishing, or the login
+ * doesn't complete within the timeout.
+ */
+function openOauthLoginPopup(base: string): Promise<DesktopOauthLoginResult> {
+  return new Promise(resolve => {
+    const popup = window.open(`${base}/login`, 'hermes-oauth-login', 'width=520,height=720')
+
+    if (!popup) {
+      resolve({ ok: false, baseUrl: base, connected: false })
+
+      return
+    }
+
+    // Sever the popup's back-reference to us so a later cross-origin page (the
+    // IDP, or any redirect it makes) can't drive our window via window.opener
+    // (reverse tabnabbing). We can't pass `noopener` to window.open because that
+    // returns null and we need the handle to poll `.closed` / call `.close()`.
+    // Safe to set here: the popup is still on our same-origin `/login`.
+    try {
+      popup.opener = null
+    } catch {
+      // Some browsers make opener read-only; the poll/close path still works.
+    }
+
+    let settled = false
+    const startedAt = Date.now()
+    const TIMEOUT_MS = 5 * 60_000
+
+    const finish = (connected: boolean): void => {
+      if (settled) {return}
+      settled = true
+      clearInterval(timer)
+
+      try {
+        if (!popup.closed) {popup.close()}
+      } catch {
+        // Closing a window we opened is always allowed, but guard anyway.
+      }
+
+      resolve({ ok: true, baseUrl: base, connected })
+    }
+
+    // The gateway lands on `/` (a valid authenticated page) after the callback
+    // sets the cookies; we only care that the cookie jar is populated, which we
+    // observe from the app window via /api/auth/me now that it's same-origin.
+    const timer = setInterval(() => {
+      void (async () => {
+        if (settled) {return}
+
+        if (await probeAuthConnected(base)) {
+          finish(true)
+
+          return
+        }
+
+        if (popup.closed || Date.now() - startedAt > TIMEOUT_MS) {
+          finish(false)
+        }
+      })()
+    }, 600)
+  })
 }
 
 const DEFAULT_API_TIMEOUT_MS = 30_000
@@ -194,13 +258,18 @@ const DEFAULT_API_TIMEOUT_MS = 30_000
 async function apiFetch<T>(request: HermesApiRequest): Promise<T> {
   const { body, method = 'GET', path, profile, timeoutMs } = request
   let url = baseUrl() + path
+
   if (profile) {
     url += `${url.includes('?') ? '&' : '?'}profile=${encodeURIComponent(profile)}`
   }
+
   const token = resolveToken()
   const headers: Record<string, string> = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  if (token) headers['X-Hermes-Session-Token'] = token
+
+  if (body !== undefined) {headers['Content-Type'] = 'application/json'}
+
+  if (token) {headers['X-Hermes-Session-Token'] = token}
+
   const res = await fetch(url, {
     method,
     headers,
@@ -208,22 +277,31 @@ async function apiFetch<T>(request: HermesApiRequest): Promise<T> {
     credentials: 'same-origin',
     signal: AbortSignal.timeout(timeoutMs ?? DEFAULT_API_TIMEOUT_MS)
   })
+
   const text = await res.text()
+
   if (!res.ok) {
-    if (res.status === 401 && !token) handleUnauthenticated(text)
-    // Same contract as the Electron IPC handler: reject with "NNN: message".
+    // Do NOT navigate away on 401. The app shell must stay mounted so the user
+    // can reach Settings -> Gateway (change the URL, switch gateways, sign in).
+    // Boot surfaces the reauth state via the WS path (getGatewayWsUrl ->
+    // GatewayReauthRequiredError) which drives the boot-failure sign-in branch.
+    // Same error contract as the Electron IPC handler: reject with "NNN: msg".
     throw new Error(`${res.status}: ${text || res.statusText}`)
   }
-  if (!text) return null as T
+
+  if (!text) {return null as T}
   const trimmed = text.trimStart()
+
   if (trimmed.startsWith('<')) {
     throw new Error(`Expected JSON from ${url} but got HTML`)
   }
+
   return JSON.parse(text) as T
 }
 
 function connection(profile?: string | null): HermesConnection {
   const token = resolveToken()
+
   return {
     baseUrl: baseUrl(),
     mode: 'remote',
@@ -242,9 +320,14 @@ function connection(profile?: string | null): HermesConnection {
   }
 }
 
-function toConnectionConfig(stored: StoredConnection): DesktopConnectionConfig {
+async function toConnectionConfig(stored: StoredConnection): Promise<DesktopConnectionConfig> {
   const token = resolveToken()
   const hasToken = stored.remoteAuthMode === 'token' && Boolean(stored.remoteToken || token)
+  // Reflect the REAL session state so isRemoteReauthFailure() can decide whether
+  // to show the sign-in branch. Reporting a false "connected" here would hide
+  // the sign-in path and strand the user on a dead connection.
+  const remoteOauthConnected = stored.remoteAuthMode === 'oauth' ? await probeAuthConnected() : false
+
   return {
     // The web build has no environment overrides, so the settings screen is
     // always editable.
@@ -252,7 +335,7 @@ function toConnectionConfig(stored: StoredConnection): DesktopConnectionConfig {
     mode: stored.mode,
     profile: null,
     remoteAuthMode: stored.remoteAuthMode,
-    remoteOauthConnected: stored.remoteAuthMode === 'oauth',
+    remoteOauthConnected,
     remoteTokenPreview: stored.remoteToken ? `...${stored.remoteToken.slice(-4)}` : null,
     remoteTokenSet: hasToken,
     remoteUrl: stored.remoteUrl
@@ -267,7 +350,9 @@ async function fetchStatus(
     credentials: 'same-origin',
     signal: AbortSignal.timeout(8_000)
   })
-  if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`)
+
+  if (!res.ok) {throw new Error(`${res.status}: ${res.statusText}`)}
+
   return (await res.json()) as { auth_providers?: string[]; auth_required?: boolean; version?: string }
 }
 
@@ -284,15 +369,18 @@ function readyBootProgress(): DesktopBootProgress {
 }
 
 async function webNotify(payload: HermesNotification): Promise<boolean> {
-  if (!('Notification' in window)) return false
+  if (!('Notification' in window)) {return false}
+
   if (Notification.permission === 'default') {
     await Notification.requestPermission()
   }
-  if (Notification.permission !== 'granted') return false
+
+  if (Notification.permission !== 'granted') {return false}
   new Notification(payload.title ?? 'Hermes', {
     body: payload.body,
     silent: payload.silent
   })
+
   return true
 }
 
@@ -320,16 +408,20 @@ export function createWebBridge(): Window['hermesDesktop'] {
     touchBackend: async () => ({ ok: true }),
     getGatewayWsUrl: async () => {
       const token = resolveToken()
-      if (token) return buildTokenWsUrl(token)
+
+      if (token) {return buildTokenWsUrl(token)}
       const ticket = await mintWsTicket()
+
       return `${wsBaseUrl()}/api/ws?ticket=${encodeURIComponent(ticket)}`
     },
     openSessionWindow: async sessionId => {
       const opened = window.open(`${window.location.pathname}#/${sessionId}`, '_blank', 'noopener')
+
       return opened ? { ok: true } : { ok: false, error: 'popup-blocked' }
     },
     openNewSessionWindow: async () => {
       const opened = window.open(`${window.location.pathname}#/`, '_blank', 'noopener')
+
       return opened ? { ok: true } : { ok: false, error: 'popup-blocked' }
     },
     petOverlay: {
@@ -353,17 +445,21 @@ export function createWebBridge(): Window['hermesDesktop'] {
       // desktop shell does on "Save and reconnect". Defer so this promise
       // resolves (and the UI can settle) before the navigation.
       setTimeout(() => window.location.reload(), 50)
+
       return toConnectionConfig(next)
     },
     testConnectionConfig: async input => {
       const base = normalizeBase(input?.remoteUrl ?? loadStoredConnection().remoteUrl)
       const status = await fetchStatus(base)
+
       return { baseUrl: base, ok: true, version: status?.version ?? null }
     },
     probeConnectionConfig: async remoteUrl => {
       const base = normalizeBase(remoteUrl)
+
       try {
         const status = await fetchStatus(base)
+
         return {
           baseUrl: base,
           reachable: true,
@@ -385,12 +481,27 @@ export function createWebBridge(): Window['hermesDesktop'] {
     },
     oauthLoginConnectionConfig: async remoteUrl => {
       const base = remoteUrl ? normalizeBase(remoteUrl) : baseUrl()
-      window.location.href = `${base}/login`
-      return { ok: true, baseUrl: base, connected: false }
+
+      // A cross-origin absolute URL can never hold a login session in the
+      // browser (see isSameOrigin). Fail loudly with guidance instead of
+      // navigating the tab to the gateway's own dashboard and stranding the
+      // user there - the exact symptom this replaces.
+      if (!isSameOrigin(base)) {
+        throw new Error(
+          `This gateway (${base}) is on a different origin than the app, so the browser ` +
+            'will not keep its login session after sign-in. Reach it on the same origin ' +
+            'instead: point the dev proxy (HERMES_GATEWAY_URL) at it and leave the gateway ' +
+            "URL blank, or use a session token. Desktop can use an absolute URL; the browser can't."
+        )
+      }
+
+      // Same-origin: mirror the desktop popup so the app stays mounted.
+      return openOauthLoginPopup(base)
     },
     oauthLogoutConnectionConfig: async remoteUrl => {
       const base = remoteUrl ? normalizeBase(remoteUrl) : baseUrl()
       await fetch(`${base}/auth/logout`, { method: 'POST', credentials: 'same-origin' })
+
       return { ok: true, connected: false }
     },
     profile: {
@@ -403,6 +514,7 @@ export function createWebBridge(): Window['hermesDesktop'] {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         stream.getTracks().forEach(track => track.stop())
+
         return true
       } catch {
         return false
@@ -418,6 +530,7 @@ export function createWebBridge(): Window['hermesDesktop'] {
     writeClipboard: async text => {
       try {
         await navigator.clipboard.writeText(text)
+
         return true
       } catch {
         return false
@@ -425,12 +538,14 @@ export function createWebBridge(): Window['hermesDesktop'] {
     },
     saveImageFromUrl: async url => {
       const opened = window.open(url, '_blank', 'noopener')
+
       return Boolean(opened)
     },
     saveImageBuffer: async (data, ext) => {
       const bytes = data instanceof Uint8Array ? (data as Uint8Array<ArrayBuffer>) : new Uint8Array(data)
       const filename = `hermes-image.${ext}`
       downloadBlob(new Blob([bytes]), filename)
+
       return filename
     },
     saveClipboardImage: async () => '',
@@ -513,5 +628,6 @@ export function createWebBridge(): Window['hermesDesktop'] {
       searchMarketplace: async () => []
     }
   }
+
   return bridge as Window['hermesDesktop']
 }

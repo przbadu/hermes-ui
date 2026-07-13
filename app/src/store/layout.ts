@@ -19,6 +19,7 @@ export const SIDEBAR_SESSIONS_PAGE_SIZE = 50
 const SIDEBAR_PINNED_STORAGE_KEY = 'hermes.desktop.pinnedSessions'
 const SIDEBAR_AGENTS_GROUPED_STORAGE_KEY = 'hermes.desktop.agentsGroupedByWorkspace'
 const SIDEBAR_CRON_OPEN_STORAGE_KEY = 'hermes.desktop.sidebarCronOpen'
+const SIDEBAR_SHOW_CRON_SESSIONS_STORAGE_KEY = 'hermes.desktop.showCronSessions'
 const SIDEBAR_MESSAGING_OPEN_STORAGE_KEY = 'hermes.desktop.sidebarMessagingOpen'
 const SIDEBAR_SESSION_ORDER_STORAGE_KEY = 'hermes.desktop.sessionOrder'
 const SIDEBAR_SESSION_ORDER_MANUAL_STORAGE_KEY = 'hermes.desktop.sessionOrder.manual'
@@ -128,6 +129,20 @@ export const $sidebarRecentsOpen = atom(true)
 // default (it only renders at all when cron sessions exist) so the
 // scheduler's `[IMPORTANT: …]` first-message previews don't spam recents.
 export const $sidebarCronOpen = persistentAtom(SIDEBAR_CRON_OPEN_STORAGE_KEY, false, Codecs.bool)
+// When false (default), cron-run sessions (source === 'cron') are excluded from
+// the recents fetch so scheduled jobs don't bury real chats. The SESSIONS header
+// toggle flips this; changing it triggers a recents re-fetch (the exclude list
+// is read at fetch time).
+export const $sidebarShowCronSessions = persistentAtom(
+  SIDEBAR_SHOW_CRON_SESSIONS_STORAGE_KEY,
+  false,
+  Codecs.bool
+)
+
+export function setSidebarShowCronSessions(show: boolean): void {
+  $sidebarShowCronSessions.set(show)
+}
+
 // Messaging platform sections collapse by default (they can be numerous and
 // tall). We persist the ids the user has *explicitly expanded*, so the default
 // stays collapsed unless they've opened a platform before.

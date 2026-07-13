@@ -41,6 +41,7 @@ import {
   $sidebarRecentsOpen,
   $sidebarSessionOrderIds,
   $sidebarSessionOrderManual,
+  $sidebarShowCronSessions,
   $sidebarWorkspaceOrderIds,
   $sidebarWorkspaceParentOrderIds,
   pinSession,
@@ -53,6 +54,7 @@ import {
   setSidebarRecentsOpen,
   setSidebarSessionOrderIds,
   setSidebarSessionOrderManual,
+  setSidebarShowCronSessions,
   setSidebarWorkspaceOrderIds,
   setSidebarWorkspaceParentOrderIds,
   SIDEBAR_SESSIONS_PAGE_SIZE,
@@ -100,6 +102,7 @@ import type { SidebarNavItem } from '../../types'
 
 import { countLabel } from './chrome'
 import { SidebarCronJobsSection } from './cron-jobs-section'
+import { GatewayRail } from './gateway-switcher'
 import { SidebarLoadMoreRow } from './load-more-row'
 import { orderByIds, reconcileOrderIds, resolveManualSessionOrderIds, sameIds } from './order'
 import { ProfileRail } from './profile-switcher'
@@ -235,6 +238,7 @@ export function ChatSidebar({
   const contentVisible = sidebarOpen || overlayMounted
   const panesFlipped = useStore($panesFlipped)
   const agentsGrouped = useStore($sidebarAgentsGrouped)
+  const showCronSessions = useStore($sidebarShowCronSessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const pinsOpen = useStore($sidebarPinsOpen)
   const agentsOpen = useStore($sidebarRecentsOpen)
@@ -1286,6 +1290,24 @@ export function ChatSidebar({
                           </Button>
                         ) : null}
                       </div>
+                      {!showAllProfiles ? (
+                        <Button
+                          aria-label={showCronSessions ? s.hideCronSessions : s.showCronSessions}
+                          aria-pressed={showCronSessions}
+                          className={cn(
+                            HEADER_NAV_BTN,
+                            showCronSessions && 'bg-(--ui-control-active-background) text-foreground opacity-100'
+                          )}
+                          onClick={event => {
+                            event.stopPropagation()
+                            setSidebarShowCronSessions(!showCronSessions)
+                          }}
+                          size="icon-xs"
+                          variant="ghost"
+                        >
+                          <Codicon name="clock" size="0.75rem" />
+                        </Button>
+                      ) : null}
                     </div>
                   )
                 }
@@ -1395,7 +1417,8 @@ export function ChatSidebar({
         {contentVisible && !showSessionSections && <SidebarBlankState onNewProject={openProjectCreate} />}
 
         {contentVisible && (
-          <div className="shrink-0 px-0.5 pb-1 pt-0.5">
+          <div className="flex shrink-0 flex-col gap-0.5 px-0.5 pb-1 pt-0.5">
+            <GatewayRail />
             <ProfileRail />
           </div>
         )}

@@ -1307,6 +1307,21 @@ export const ja = defineLocale({
     failedRename: 'プロファイルの名前変更に失敗しました'
   },
 
+  gateways: {
+    title: 'ゲートウェイ',
+    active: 'アクティブ',
+    switchTo: '切り替え',
+    manage: 'ゲートウェイを管理',
+    add: 'ゲートウェイを追加',
+    name: '名前',
+    namePlaceholder: '例: 個人、会社',
+    url: 'ゲートウェイURL',
+    saved: '保存済みゲートウェイ',
+    remove: '削除',
+    removeConfirm: 'このゲートウェイ接続を削除しますか？',
+    current: '現在'
+  },
+
   cron: {
     close: 'Cron を閉じる',
     title: 'スケジュール済みジョブ',
@@ -1474,6 +1489,8 @@ export const ja = defineLocale({
     groupAriaUngrouped: 'ワークスペースごとにセッションをグループ化',
     showProjects: 'プロジェクトを表示',
     showSessions: 'セッションを表示',
+    showCronSessions: 'cronジョブのセッションを表示',
+    hideCronSessions: 'cronジョブのセッションを非表示',
     groupTitleGrouped: 'セッションのグループ化を解除',
     groupTitleUngrouped: 'ワークスペースでグループ化',
     allPinned: 'ここにあるものはすべてピン留めされています。チャットのピン留めを解除すると最近のものに表示されます。',

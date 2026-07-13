@@ -1,12 +1,14 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
+import { SETTINGS_ROUTE } from '@/app/routes'
 import { Button } from '@/components/ui/button'
 import { ErrorIcon } from '@/components/ui/error-state'
 import { LogView } from '@/components/ui/log-view'
 import type { DesktopConnectionConfig } from '@/global'
 import { useI18n } from '@/i18n'
-import { FileText, Loader2, LogIn, RefreshCw, Wrench } from '@/lib/icons'
+import { FileText, Loader2, LogIn, RefreshCw, Settings, Wrench } from '@/lib/icons'
 import { $desktopBoot } from '@/store/boot'
 import { notify, notifyError } from '@/store/notifications'
 import { $desktopOnboarding } from '@/store/onboarding'
@@ -31,10 +33,15 @@ export function BootFailureOverlay() {
   const boot = useStore($desktopBoot)
   const onboarding = useStore($desktopOnboarding)
   const { t } = useI18n()
+  const navigate = useNavigate()
   const [busy, setBusy] = useState<BusyAction>(null)
   const [logs, setLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState(false)
   const [remoteReauth, setRemoteReauth] = useState<RemoteReauth | null>(null)
+  // Lets the user step past a hard failure into Settings -> Gateway to change
+  // the URL or switch gateways. The app shell renders underneath this overlay,
+  // so dismissing it reveals the (still usable) settings screen.
+  const [dismissed, setDismissed] = useState(false)
 
   const visible = Boolean(boot.error) && !boot.running
   // While first-run onboarding owns the picker/flow we let it surface its own
@@ -106,8 +113,13 @@ export function BootFailureOverlay() {
     }
   }, [visible])
 
-  if (!visible || suppressed) {
+  if (!visible || suppressed || dismissed) {
     return null
+  }
+
+  const openGatewaySettings = () => {
+    navigate(`${SETTINGS_ROUTE}?tab=gateway`)
+    setDismissed(true)
   }
 
   const retry = async () => {
@@ -120,13 +132,6 @@ export function BootFailureOverlay() {
     setBusy('repair')
     await window.hermesDesktop?.repairBootstrap().catch(() => undefined)
     window.location.reload()
-  }
-
-  const switchToLocalGateway = async () => {
-    setBusy('local')
-    // applyConnectionConfig reloads the window from the main process.
-    await window.hermesDesktop?.applyConnectionConfig({ mode: 'local' }).catch(() => undefined)
-    setBusy(null)
   }
 
   // Open the gateway's login window (renders the username/password form for a
@@ -211,9 +216,9 @@ export function BootFailureOverlay() {
                   {copy.repairInstall}
                 </Button>
               ) : null}
-              <Button disabled={Boolean(busy)} onClick={() => void switchToLocalGateway()} variant="secondary">
-                {busy === 'local' ? <Loader2 className="animate-spin" /> : null}
-                {copy.useLocalGateway}
+              <Button disabled={Boolean(busy)} onClick={openGatewaySettings} variant="secondary">
+                <Settings />
+                {t.gateways.manage}
               </Button>
               <Button onClick={openLogs} variant="ghost">
                 <FileText />

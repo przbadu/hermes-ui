@@ -12,6 +12,24 @@ const GATEWAY = process.env.HERMES_GATEWAY_URL ?? 'http://127.0.0.1:9119'
 export default defineConfig({
   base: './',
   plugins: [
+    // Dev only: tell the client which gateway origin the proxy below forwards
+    // to, so an absolute gateway URL pointing at it can be routed back through
+    // the same-origin proxy (see normalizeBase). Mirrors how the gateway injects
+    // window.__HERMES_BASE_PATH__ / __HERMES_SESSION_TOKEN__ into the served HTML.
+    // `apply: 'serve'` keeps it out of production builds, where no proxy exists.
+    {
+      name: 'hermes-dev-proxy-target',
+      apply: 'serve',
+      transformIndexHtml: () => [
+        {
+          tag: 'script',
+          injectTo: 'head-prepend',
+          // Escape `<` so a target containing `</script>` can't break out of the
+          // inline script. Dev-only and developer-supplied, but cheap to harden.
+          children: `window.__HERMES_DEV_PROXY_TARGET__ = ${JSON.stringify(GATEWAY).replace(/</g, '\\u003c')}`
+        }
+      ]
+    },
     react(),
     tailwindcss(),
     VitePWA({

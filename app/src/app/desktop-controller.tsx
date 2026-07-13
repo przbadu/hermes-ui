@@ -25,6 +25,7 @@ import {
   $fileBrowserOpen,
   $panesFlipped,
   $pinnedSessionIds,
+  $sidebarShowCronSessions,
   FILE_BROWSER_DEFAULT_WIDTH,
   FILE_BROWSER_MAX_WIDTH,
   FILE_BROWSER_MIN_WIDTH,
@@ -409,6 +410,26 @@ export function DesktopController() {
     }
 
     return onSessionsChanged(() => void refreshSessions().catch(() => undefined))
+  }, [refreshSessions])
+
+  // Toggling "show cron sessions" changes the recents exclude list (read at
+  // fetch time), so re-pull when it flips. Skip the initial fire.
+  useEffect(() => {
+    if (isSecondaryWindow()) {
+      return
+    }
+
+    let primed = false
+
+    return $sidebarShowCronSessions.subscribe(() => {
+      if (!primed) {
+        primed = true
+
+        return
+      }
+
+      void refreshSessions().catch(() => undefined)
+    })
   }, [refreshSessions])
 
   const toggleSelectedPin = useCallback(() => {
