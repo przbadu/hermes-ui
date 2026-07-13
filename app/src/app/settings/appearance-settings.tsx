@@ -12,7 +12,7 @@ import { Check, Download, Loader2, Palette, Trash2 } from '@/lib/icons'
 import { selectableCardClass } from '@/lib/selectable-card'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
-import { supportsWindowZoom } from '@/lib/web-platform'
+import { supportsMarketplaceThemes, supportsWindowZoom } from '@/lib/web-platform'
 import { $embedAllowed, $embedMode, clearEmbedAllowed, type EmbedMode, setEmbedMode } from '@/store/embed-consent'
 import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/profile'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
@@ -385,7 +385,9 @@ export function AppearanceSettings() {
                       })}
                     </div>
                   )}
-                  <MarketplaceThemeResults installs={installs} onInstalled={name => setTheme(name)} query={query} />
+                  {supportsMarketplaceThemes() ? (
+                    <MarketplaceThemeResults installs={installs} onInstalled={name => setTheme(name)} query={query} />
+                  ) : null}
                 </div>
                 {showProfileNote && (
                   <p className="mt-3 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">

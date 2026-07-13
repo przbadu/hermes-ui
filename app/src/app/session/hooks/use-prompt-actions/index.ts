@@ -39,10 +39,12 @@ import { useSlashCommand } from './slash'
 import { useSubmitPrompt } from './submit'
 import {
   appendText,
+  base64FromDataUrl,
   blobToDataUrl,
   delay,
   friendlyRemoteAttachError,
   type GatewayRequest,
+  imageFilenameFromPath,
   inlineErrorMessage,
   isSessionBusyError,
   isSessionNotFoundError,
@@ -59,13 +61,26 @@ interface HandoffResult {
   error?: string
 }
 
+/** Build the image.attach_bytes payload from an in-memory `data:` URL. */
+function bytesPayloadFromDataUrl(
+  dataUrl: string,
+  label: string,
+  path: string
+): { contentBase64: string; filename: string } | null {
+  const contentBase64 = base64FromDataUrl(dataUrl)
+
+  return contentBase64 ? { contentBase64, filename: label || imageFilenameFromPath(path) } : null
+}
+
 /**
  * Stage one file/image attachment into the session workspace and return the
  * attachment rewritten with the gateway-side ref. Images upload their bytes in
  * remote mode (so vision works) and pass the path locally; non-image files
- * upload bytes remotely and pass the path locally. Throws on failure so callers
- * can surface an error. Shared by submit-time sync, the eager drop-time upload,
- * and the message-edit composer drop — keep them in lockstep.
+ * upload bytes remotely and pass the path locally. A browser-picked/dropped
+ * file carries its bytes in `attachment.bytesDataUrl` and uploads those directly
+ * (the web build has no local disk the gateway can read). Throws on failure so
+ * callers can surface an error. Shared by submit-time sync, the eager drop-time
+ * upload, and the message-edit composer drop — keep them in lockstep.
  */
 export async function uploadComposerAttachment(
   attachment: ComposerAttachment,
@@ -78,11 +93,15 @@ export async function uploadComposerAttachment(
   if (attachment.kind === 'image') {
     let result: ImageAttachResponse
 
-    if (remote) {
+    // In-memory bytes (browser pick/drop/paste) OR a remote gateway both need a
+    // byte upload, since the file isn't on the gateway's disk to read by path.
+    if (attachment.bytesDataUrl || remote) {
       let payload: Awaited<ReturnType<typeof readImageForRemoteAttach>>
 
       try {
-        payload = await readImageForRemoteAttach(path)
+        payload = attachment.bytesDataUrl
+          ? bytesPayloadFromDataUrl(attachment.bytesDataUrl, label, path)
+          : await readImageForRemoteAttach(path)
       } catch (err) {
         throw friendlyRemoteAttachError(err, label)
       }
@@ -121,7 +140,10 @@ export async function uploadComposerAttachment(
   // Non-image file.
   let dataUrl: string | null = null
 
-  if (remote) {
+  if (attachment.bytesDataUrl) {
+    // Browser-picked/dropped file: bytes are already in hand.
+    dataUrl = attachment.bytesDataUrl
+  } else if (remote) {
     try {
       dataUrl = await readFileDataUrlForAttach(path)
     } catch (err) {

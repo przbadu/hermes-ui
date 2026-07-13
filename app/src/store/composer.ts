@@ -11,6 +11,12 @@ export interface ComposerAttachment {
   previewUrl?: string
   path?: string
   attachedSessionId?: string
+  /** In-memory `data:` URL for a browser-picked/dropped/pasted local file whose
+   * bytes live only in this tab (the web build has no local disk the gateway can
+   * read by path). Carried until submit, when `uploadComposerAttachment` uploads
+   * these bytes via image.attach_bytes / file.attach. Memory-only, never
+   * persisted (same as blob-backed drafts). */
+  bytesDataUrl?: string
   /** Set while the file/image bytes are being staged into the session
    * workspace (remote upload or local stage), and 'error' if that failed.
    * Drives the spinner / error state on the composer attachment card. */

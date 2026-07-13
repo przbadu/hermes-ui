@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n'
 import { attachmentId, contextPath, pathLabel } from '@/lib/chat-runtime'
 import { readDesktopFileDataUrl, selectDesktopPaths } from '@/lib/desktop-fs'
 import { normalize } from '@/lib/text'
+import { isWebPlatform } from '@/lib/web-platform'
 import {
   addComposerAttachment,
   type ComposerAttachment,
@@ -34,6 +35,51 @@ function blobExtension(blob: Blob): string {
   const mime = normalize(blob.type.split(';')[0])
 
   return BLOB_MIME_EXTENSION[mime] || '.png'
+}
+
+/** Read a browser Blob/File into a `data:` URL (base64). */
+function readBlobDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read file'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Open the browser's native file chooser and resolve the selected files. The
+ * web build's stand-in for the Electron path picker: there is no gateway-side
+ * path for a file that lives in the user's browser, so we take the File objects
+ * and upload their bytes at submit. Resolves `[]` on cancel.
+ */
+function pickLocalFiles(options: { accept?: string; multiple?: boolean } = {}): Promise<File[]> {
+  return new Promise(resolve => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = options.multiple ?? true
+
+    if (options.accept) {
+      input.accept = options.accept
+    }
+
+    let settled = false
+
+    const done = (files: File[]) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      resolve(files)
+    }
+
+    input.onchange = () => done(input.files ? Array.from(input.files) : [])
+    // Modern browsers fire `cancel` when the dialog is dismissed; without it the
+    // promise would hang. Harmless where unsupported (onchange still resolves).
+    input.oncancel = () => done([])
+    input.click()
+  })
 }
 
 export function isImagePath(filePath: string): boolean {
@@ -304,8 +350,76 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
     })
   }, [])
 
+  /**
+   * Attach a browser-local file/image whose bytes live only in this tab. The web
+   * build has no on-disk path the gateway can read, so we carry the bytes as a
+   * `data:` URL on the attachment and upload them at submit (image.attach_bytes
+   * / file.attach). Used by the web file/image pickers and by drop/paste.
+   */
+  const attachLocalFile = useCallback(
+    async (blob: Blob, name?: string) => {
+      const filename = name || (blob instanceof File ? blob.name : '') || `image${blobExtension(blob)}`
+
+      let bytesDataUrl: string
+
+      try {
+        bytesDataUrl = await readBlobDataUrl(blob)
+      } catch (err) {
+        notifyError(err, copy.imageAttachFailed)
+
+        return false
+      }
+
+      if (!bytesDataUrl) {
+        return false
+      }
+
+      const isImage = (blob.type && blob.type.startsWith('image/')) || isImagePath(filename)
+
+      // `path` is set to the filename so submit routes this through the upload
+      // pipeline (a pathless attachment is skipped); the bytes ride on
+      // `bytesDataUrl`, not the path, which the gateway never reads.
+      attachToMain(
+        isImage
+          ? {
+              id: attachmentId('image', filename),
+              kind: 'image',
+              label: filename,
+              detail: filename,
+              path: filename,
+              previewUrl: bytesDataUrl,
+              bytesDataUrl
+            }
+          : {
+              id: attachmentId('file', filename),
+              kind: 'file',
+              label: filename,
+              detail: filename,
+              path: filename,
+              bytesDataUrl
+            }
+      )
+
+      return true
+    },
+    [copy.imageAttachFailed]
+  )
+
   const pickContextPaths = useCallback(
     async (kind: 'file' | 'folder') => {
+      // Web: files live in the browser, not on the gateway, so pick them with
+      // the native chooser and upload their bytes. Folders still use the
+      // gateway-backed remote picker (a directory has no bytes to upload).
+      if (kind === 'file' && isWebPlatform()) {
+        const files = await pickLocalFiles({ multiple: true })
+
+        for (const file of files) {
+          await attachLocalFile(file)
+        }
+
+        return
+      }
+
       const paths = await selectDesktopPaths({
         title: kind === 'file' ? 'Add files as context' : 'Add folders as context',
         defaultPath: currentCwd || undefined,
@@ -329,7 +443,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         })
       }
     },
-    [currentCwd]
+    [attachLocalFile, currentCwd]
   )
 
   const insertContextPathInlineRef = useCallback(
@@ -417,6 +531,12 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         return false
       }
 
+      // Web: no local disk to stage into, so carry the bytes in memory and
+      // upload them at submit instead of round-tripping through saveImageBuffer.
+      if (isWebPlatform()) {
+        return attachLocalFile(blob)
+      }
+
       try {
         const buffer = await blob.arrayBuffer()
         const data = new Uint8Array(buffer)
@@ -435,10 +555,21 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         return false
       }
     },
-    [attachImagePath, copy.imageAttach, copy.imageAttachFailed, copy.imageWriteFailed]
+    [attachImagePath, attachLocalFile, copy.imageAttach, copy.imageAttachFailed, copy.imageWriteFailed]
   )
 
   const pickImages = useCallback(async () => {
+    // Web: pick from the browser and upload the bytes (see pickContextPaths).
+    if (isWebPlatform()) {
+      const files = await pickLocalFiles({ accept: 'image/*', multiple: true })
+
+      for (const file of files) {
+        await attachLocalFile(file)
+      }
+
+      return
+    }
+
     const paths = await selectDesktopPaths({
       title: copy.attachImages,
       defaultPath: currentCwd || undefined,
@@ -457,7 +588,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
     for (const path of paths) {
       await attachImagePath(path)
     }
-  }, [attachImagePath, copy.attachImages, currentCwd, t.composer.images])
+  }, [attachImagePath, attachLocalFile, copy.attachImages, currentCwd, t.composer.images])
 
   const pasteClipboardImage = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -585,6 +716,14 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
           continue
         }
 
+        // Web: an OS-dropped file has no gateway path (getPathForFile is empty),
+        // so upload its in-memory bytes instead of referencing a path.
+        if (isWebPlatform() && (await attachLocalFile(file))) {
+          attached = true
+
+          continue
+        }
+
         lastFailure = `Could not attach ${file.name || 'file'}`
       }
 
@@ -594,7 +733,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
       return attached
     },
-    [attachContextFilePath, attachContextFolderPath, attachImageBlob, attachImagePath, copy.dropFiles]
+    [attachContextFilePath, attachContextFolderPath, attachImageBlob, attachImagePath, attachLocalFile, copy.dropFiles]
   )
 
   const removeAttachment = useCallback(

@@ -47,6 +47,7 @@ import {
 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
+import { supportsMarketplaceThemes } from '@/lib/web-platform'
 import { $repoWorktrees } from '@/store/coding-status'
 import {
   $commandPaletteOpen,
@@ -735,18 +736,24 @@ export function CommandPalette() {
         title: t.settings.appearance.themeTitle,
         placeholder: t.settings.appearance.themeDesc,
         groups: [
-          // Pinned at the top: drills into the Marketplace browser.
-          {
-            items: [
-              {
-                icon: Download,
-                id: 'theme-install',
-                keywords: ['install', 'marketplace', 'vscode', 'vs code', 'download', 'new', 'color'],
-                label: t.commandCenter.installTheme.title,
-                to: 'install-theme'
-              }
-            ]
-          },
+          // Pinned at the top: drills into the Marketplace browser. Hidden in the
+          // web build, where the gateway proxies no marketplace (the page would
+          // always be empty).
+          ...(supportsMarketplaceThemes()
+            ? [
+                {
+                  items: [
+                    {
+                      icon: Download,
+                      id: 'theme-install',
+                      keywords: ['install', 'marketplace', 'vscode', 'vs code', 'download', 'new', 'color'],
+                      label: t.commandCenter.installTheme.title,
+                      to: 'install-theme'
+                    }
+                  ]
+                }
+              ]
+            : []),
           // Built-ins and imported families list under the mode(s) they support;
           // picking sets skin + mode at once. A multi-variant import (GitHub,
           // Solarized) appears in both groups and switches variants with the mode.

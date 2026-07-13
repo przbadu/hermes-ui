@@ -3,6 +3,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
 import { useI18n } from '@/i18n'
+import { supportsLogAccess } from '@/lib/web-platform'
 
 export interface ErrorBoundaryFallbackProps {
   error: Error
@@ -68,9 +69,11 @@ function RootErrorFallback({ error, reset }: ErrorBoundaryFallbackProps) {
         <Button onClick={() => window.location.reload()} variant="text">
           {t.errors.reloadWindow}
         </Button>
-        <Button onClick={() => void window.hermesDesktop?.revealLogs()?.catch(() => undefined)} variant="text">
-          {t.errors.openLogs}
-        </Button>
+        {supportsLogAccess() ? (
+          <Button onClick={() => void window.hermesDesktop?.revealLogs()?.catch(() => undefined)} variant="text">
+            {t.errors.openLogs}
+          </Button>
+        ) : null}
       </ErrorState>
     </div>
   )

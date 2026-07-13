@@ -50,3 +50,44 @@ export function supportsWindowZoom(): boolean {
 export function supportsAppAutoUpdate(): boolean {
   return !isWebPlatform()
 }
+
+/**
+ * True when the app can uninstall itself. The web bridge keeps an inert
+ * `uninstall` stub whose methods throw, so presence cannot distinguish it —
+ * fall back to the general web-platform check. A browser tab has nothing to
+ * uninstall.
+ */
+export function supportsUninstall(): boolean {
+  return !isWebPlatform()
+}
+
+/**
+ * True when the VS Code theme marketplace is reachable. The web bridge keeps an
+ * inert `themes` stub (`fetchMarketplace` throws, `searchMarketplace` returns
+ * `[]`), so presence cannot distinguish it — fall back to the general
+ * web-platform check. The gateway proxies no marketplace, so the browser can
+ * only offer local themes.
+ */
+export function supportsMarketplaceThemes(): boolean {
+  return !isWebPlatform()
+}
+
+/**
+ * True when a native OS folder picker can set the default project directory.
+ * The web bridge keeps an inert `settings` stub whose `pickDefaultProjectDir`
+ * resolves `{ canceled: true }`, so presence cannot distinguish it — fall back
+ * to the general web-platform check. The browser has no native directory dialog.
+ */
+export function supportsDefaultProjectDir(): boolean {
+  return !isWebPlatform()
+}
+
+/**
+ * True when local app log files can be revealed/read. The web bridge keeps
+ * inert `revealLogs`/`getRecentLogs` stubs (no-op / empty), so presence cannot
+ * distinguish them — fall back to the general web-platform check. A browser has
+ * no on-disk log directory to open.
+ */
+export function supportsLogAccess(): boolean {
+  return !isWebPlatform()
+}
