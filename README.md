@@ -38,6 +38,20 @@ cd /home/przbadu/dev/hermes-apps/hermes-ui
 
 For gateways using OAuth, prefer `bin/prod`: the login redirect must return to the same origin the app was served from, which the gateway-hosted path guarantees.
 
+## Automated setup (for Hermes / AI agents)
+
+If you are an AI agent (Hermes, Claude Code, and similar), or you are asking one to set this up, follow [AGENTS.md](AGENTS.md).
+It is a step-by-step runbook covering preflight checks, build, serving the bundle from the gateway (the manual path), verification, and rebuild.
+
+The short version, from the repo root:
+
+```sh
+cd app && bun install && bun run build   # build the static bundle
+cd .. && ./bin/prod                       # serve it from the gateway (same-origin)
+```
+
+The runbook deliberately covers only the manual path; an agent should not install or modify systemd services unless you explicitly ask.
+
 ## Choosing the gateway from inside the app
 
 The connection is editable at runtime in Settings -> Gateway, exactly like the desktop app.
