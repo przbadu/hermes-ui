@@ -16,12 +16,17 @@ import { ErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
 import { I18nProvider } from './i18n'
 import { installClipboardShim } from './lib/clipboard'
+import { initNativeShell } from './lib/native-shell'
 import { queryClient } from './lib/query-client'
 import { registerPwa } from './pwa/register'
 import { ThemeProvider } from './themes/context'
 
 installClipboardShim()
 registerPwa()
+// Wire the Capacitor native shell (status bar, keyboard resize, Android back
+// button, splash hide). A hard no-op on web/Electron, so it is safe to call
+// unconditionally here next to the other one-time bootstrap side effects.
+void initNativeShell()
 
 // Dev-only: install __PERF_DRIVE__ + __PERF_PROBE__ on window so the
 // scripts/ harnesses can drive a synthetic stream + record render cost.

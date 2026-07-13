@@ -292,6 +292,14 @@ export function GatewaySettings() {
   })
 
   const save = async (apply: boolean) => {
+    // Block saving a gateway this build can't actually reach. In the browser a
+    // remote cross-origin (or mixed-content) gateway is unusable - CORS,
+    // SameSite cookies and the https->http rule all reject it - so we warn
+    // instead of saving a dead connection. On NATIVE the cross-origin case is
+    // reachable (CapacitorHttp + the trusted WebView WS origin), so a remote
+    // https URL saves normally; but a plain-http gateway is still blocked there,
+    // because the secure WebView refuses the `ws://` socket the app needs even
+    // though its REST probe would pass (see `classifyGatewayReach`).
     if (state.mode === 'remote' && classifyGatewayReach(trimmedUrl)) {
       notify({ kind: 'warning', title: g.crossOriginTitle, message: g.crossOriginError })
 

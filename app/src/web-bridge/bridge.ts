@@ -29,8 +29,10 @@ import type {
   HermesConnection,
   HermesNotification
 } from '@/global'
+import { isNativePlatform } from '@/lib/native-platform'
 
 import { classifyGatewayReach, getActiveGateway, normalizeBase, servingBase, updateGateway } from './gateways'
+import { hermesHttp } from './http'
 
 declare global {
   interface Window {
@@ -128,7 +130,8 @@ function buildTokenWsUrl(token: string): string {
 }
 
 async function mintWsTicket(): Promise<string> {
-  const res = await fetch(`${baseUrl()}/api/auth/ws-ticket`, {
+  const res = await hermesHttp({
+    url: `${baseUrl()}/api/auth/ws-ticket`,
     method: 'POST',
     credentials: 'same-origin'
   })
@@ -157,9 +160,11 @@ async function probeAuthConnected(base: string = baseUrl()): Promise<boolean> {
   }
 
   try {
-    const res = await fetch(`${base}/api/auth/me`, {
+    const res = await hermesHttp({
+      url: `${base}/api/auth/me`,
       credentials: 'same-origin',
-      signal: AbortSignal.timeout(6_000)
+      signal: AbortSignal.timeout(6_000),
+      timeoutMs: 6_000
     })
 
     return res.ok
@@ -178,6 +183,14 @@ async function probeAuthConnected(base: string = baseUrl()): Promise<boolean> {
  * the gateway serves the app. An absolute cross-origin URL never can.
  */
 function isSameOrigin(base: string): boolean {
+  // Native (Capacitor) is immune to the same-origin cookie constraint this guard
+  // protects against: CapacitorHttp issues requests from the OS network stack
+  // with a native cookie jar, so the gateway's HttpOnly SameSite=Lax session
+  // cookie is stored and replayed even for a cross-origin gateway. Treating the
+  // native build as always "same origin" here keeps the OAuth guard from falsely
+  // blocking a legitimate remote gateway.
+  if (isNativePlatform()) {return true}
+
   try {
     return new URL(base, window.location.href).origin === window.location.origin
   } catch {
@@ -270,12 +283,16 @@ async function apiFetch<T>(request: HermesApiRequest): Promise<T> {
 
   if (token) {headers['X-Hermes-Session-Token'] = token}
 
-  const res = await fetch(url, {
+  const effectiveTimeout = timeoutMs ?? DEFAULT_API_TIMEOUT_MS
+
+  const res = await hermesHttp({
+    url,
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: 'same-origin',
-    signal: AbortSignal.timeout(timeoutMs ?? DEFAULT_API_TIMEOUT_MS)
+    signal: AbortSignal.timeout(effectiveTimeout),
+    timeoutMs: effectiveTimeout
   })
 
   const text = await res.text()
@@ -346,12 +363,19 @@ async function toConnectionConfig(stored: StoredConnection): Promise<DesktopConn
 async function fetchStatus(
   base: string
 ): Promise<{ auth_providers?: string[]; auth_required?: boolean; version?: string } | null> {
-  const res = await fetch(`${base}/api/status`, {
+  const res = await hermesHttp({
+    url: `${base}/api/status`,
     credentials: 'same-origin',
-    signal: AbortSignal.timeout(8_000)
+    signal: AbortSignal.timeout(8_000),
+    timeoutMs: 8_000
   })
 
-  if (!res.ok) {throw new Error(`${res.status}: ${res.statusText}`)}
+  // Web keeps its original statusText-only message byte-for-byte. On native
+  // `statusText` is always '' (CapacitorHttp surfaces no reason phrase), so fall
+  // back to the response body to preserve a useful "NNN: message".
+  if (!res.ok) {
+    throw new Error(`${res.status}: ${res.statusText || (await res.text())}`)
+  }
 
   return (await res.json()) as { auth_providers?: string[]; auth_required?: boolean; version?: string }
 }
@@ -510,7 +534,7 @@ export function createWebBridge(): Window['hermesDesktop'] {
     },
     oauthLogoutConnectionConfig: async remoteUrl => {
       const base = remoteUrl ? normalizeBase(remoteUrl) : baseUrl()
-      await fetch(`${base}/auth/logout`, { method: 'POST', credentials: 'same-origin' })
+      await hermesHttp({ url: `${base}/auth/logout`, method: 'POST', credentials: 'same-origin' })
 
       return { ok: true, connected: false }
     },

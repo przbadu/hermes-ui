@@ -15,6 +15,8 @@
  */
 import { atom } from 'nanostores'
 
+import { isNativePlatform } from '@/lib/native-platform'
+
 export interface GatewayConnection {
   id: string
   name: string
@@ -77,6 +79,15 @@ function rewriteThroughDevProxy(absoluteUrl: string): string {
  * - a `/prefix` is a reverse-proxy path on the serving origin.
  * - '' or anything else falls back to the serving origin.
  * A trailing slash is always trimmed.
+ *
+ * On NATIVE (Capacitor) there is no meaningful serving origin to fall back to:
+ * `capacitor://localhost` / `https://localhost` hosts only the bundled assets,
+ * never a gateway. So an EMPTY url has nothing to resolve to on native - the
+ * native build requires an ABSOLUTE gateway URL (chosen at runtime in the
+ * gateway manager) and the `''` -> servingBase fallback below is a web-only
+ * convenience. Absolute `https://host` URLs already pass through verbatim
+ * (`rewriteThroughDevProxy` is a no-op outside dev), which is exactly what
+ * native needs, so no native-specific branch is required here.
  */
 export function normalizeBase(url: string): string {
   const value = (url || '').trim().replace(/\/+$/, '')
@@ -106,14 +117,33 @@ export function normalizeBase(url: string): string {
 export type GatewayReachBlock = 'mixed-content' | 'cross-origin'
 
 export function classifyGatewayReach(url: string): GatewayReachBlock | null {
+  // Native (Capacitor) is the escape hatch for CORS/SameSite: REST goes through
+  // CapacitorHttp (the OS network stack + native cookie jar), so the cross-origin
+  // block does NOT apply and a remote https gateway is fully reachable.
+  //
+  // Mixed content is the exception that survives on native. The live gateway
+  // WebSocket is NOT routed through CapacitorHttp - the shared client opens it
+  // with the WebView's own `new WebSocket` - and the native WebView is always a
+  // secure context (androidScheme 'https' / iOS capacitor://), so it refuses a
+  // plain `ws://` socket exactly like an https browser page would. A plain-http
+  // gateway would therefore pass its REST probe yet silently fail to open its
+  // WebSocket, which the whole app depends on. So on native we keep ONLY the
+  // mixed-content block and drop the cross-origin one.
+  const native = isNativePlatform()
+
   try {
     const target = new URL(normalizeBase(url), window.location.href)
 
     if (target.origin === window.location.origin) {return null}
 
-    if (window.location.protocol === 'https:' && target.protocol === 'http:') {return 'mixed-content'}
+    // A secure context (an https browser page, or any native WebView) cannot
+    // open a plaintext http/ws gateway. The browser only reaches this when it
+    // was itself served over https; the native WebView always is.
+    const secureContext = native || window.location.protocol === 'https:'
 
-    return 'cross-origin'
+    if (secureContext && target.protocol === 'http:') {return 'mixed-content'}
+
+    return native ? null : 'cross-origin'
   } catch {
     // Unparseable input: let the normal probe/validation surface it.
     return null

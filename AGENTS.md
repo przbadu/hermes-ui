@@ -82,6 +82,12 @@ cd app && bun run build
 
 Then restart however you are serving: re-run `./bin/prod`, or restart the gateway process that has `HERMES_WEB_DIST` set.
 
+## Capacitor / Android
+
+This runbook covers the web build served same-origin from the gateway.
+The native Android wrapper is a separate path: it ships bundled assets and talks to a REMOTE cross-origin gateway (chosen in-app), because `CapacitorHttp` and the native WebView origin escape the same-origin rules above.
+For the native build, sync, and run steps - and the on-hardware validation risks - see [CAPACITOR.md](CAPACITOR.md).
+
 ## Guardrails
 
 - `HERMES_WEB_DIST` must be an absolute path to `app/dist`. `scripts/serve-on-gateway.sh` handles this for you; do not hand-set a relative path.
