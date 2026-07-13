@@ -9,6 +9,7 @@ import { LogView } from '@/components/ui/log-view'
 import type { DesktopConnectionConfig } from '@/global'
 import { useI18n } from '@/i18n'
 import { FileText, Loader2, LogIn, RefreshCw, Settings, Wrench } from '@/lib/icons'
+import { supportsLogAccess } from '@/lib/web-platform'
 import { $desktopBoot } from '@/store/boot'
 import { notify, notifyError } from '@/store/notifications'
 import { $desktopOnboarding } from '@/store/onboarding'
@@ -220,10 +221,12 @@ export function BootFailureOverlay() {
                 <Settings />
                 {t.gateways.manage}
               </Button>
-              <Button onClick={openLogs} variant="ghost">
-                <FileText />
-                {copy.openLogs}
-              </Button>
+              {supportsLogAccess() ? (
+                <Button onClick={openLogs} variant="ghost">
+                  <FileText />
+                  {copy.openLogs}
+                </Button>
+              ) : null}
             </div>
             <p className="text-xs text-muted-foreground">{remoteReauth ? copy.remoteSignInHint : copy.repairHint}</p>
           </div>

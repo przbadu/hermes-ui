@@ -7,6 +7,7 @@ import type { DesktopAuthProvider, DesktopConnectionProbeResult } from '@/global
 import { useI18n } from '@/i18n'
 import { AlertCircle, Check, FileText, Globe, Loader2, LogIn, Monitor } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { supportsLogAccess } from '@/lib/web-platform'
 import { notify, notifyError } from '@/store/notifications'
 import { $profiles, refreshActiveProfile } from '@/store/profile'
 import { classifyGatewayReach } from '@/web-bridge/gateways'
@@ -601,18 +602,20 @@ export function GatewaySettings() {
         </Button>
       </div>
 
-      <div className="mt-6 grid gap-1">
-        <ListRow
-          action={
-            <Button onClick={() => void window.hermesDesktop?.revealLogs()} size="sm" variant="textStrong">
-              <FileText />
-              {g.openLogs}
-            </Button>
-          }
-          description={g.diagnosticsDesc}
-          title={g.diagnostics}
-        />
-      </div>
+      {supportsLogAccess() ? (
+        <div className="mt-6 grid gap-1">
+          <ListRow
+            action={
+              <Button onClick={() => void window.hermesDesktop?.revealLogs()} size="sm" variant="textStrong">
+                <FileText />
+                {g.openLogs}
+              </Button>
+            }
+            description={g.diagnosticsDesc}
+            title={g.diagnostics}
+          />
+        </div>
+      ) : null}
     </SettingsContent>
   )
 }

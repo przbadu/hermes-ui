@@ -25,3 +25,6 @@ yarn-error.log*
 .idea/
 .vscode/
 *.swp
+
+.worktree
+.worktrees

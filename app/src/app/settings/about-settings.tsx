@@ -7,7 +7,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { type Translations, useI18n } from '@/i18n'
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { supportsAppAutoUpdate } from '@/lib/web-platform'
+import { supportsAppAutoUpdate, supportsUninstall } from '@/lib/web-platform'
 import {
   $desktopVersion,
   $updateApply,
@@ -184,7 +184,7 @@ export function AboutSettings() {
           </>
         )}
 
-        <UninstallSection />
+        {supportsUninstall() ? <UninstallSection /> : null}
       </div>
     </SettingsContent>
   )
