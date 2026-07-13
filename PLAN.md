@@ -16,7 +16,7 @@ We are reusing the entire proven UI instead of reimplementing it, in any languag
 ### 1.1 Extraction model
 
 `hermes-ui` was produced by extracting the desktop renderer, not by writing a new client.
-It lives at `/home/przbadu/dev/hermes-apps/hermes-ui/` with this shape:
+It lives at `$HOME/dev/hermes-apps/hermes-ui/` with this shape:
 
 - `app/` - the extracted Vite renderer.
 - `shared/` - the extracted `@hermes/shared` protocol client, pure TypeScript.
