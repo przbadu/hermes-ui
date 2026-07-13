@@ -6,7 +6,7 @@ It ships no backend of its own: every request (REST, auth, and the WebSocket) go
 
 For the extraction plan and provenance, see:
 
-- [../PLAN-hermes-ui.md](../PLAN-hermes-ui.md) - the plan behind this repo.
+- [PLAN.md](PLAN.md) - the plan behind this repo.
 - [UPSTREAM.md](UPSTREAM.md) - upstream commit, what was changed, and how to re-sync.
 
 ## Repo layout
