@@ -49,9 +49,7 @@ Prefer the ready-made runner, from the repo root:
 ./bin/prod --port 9200    # extra args pass straight through to 'hermes serve'
 ```
 
-Keep the gateway on loopback (`127.0.0.1`, the default).
-Do not expose it to your network: the gateway injects a session token into `index.html`, so any device that can reach the port loads the UI already authenticated.
-For access from another machine, use a [Tailscale](https://tailscale.com) network and reach the gateway over its private address instead.
+Keep the gateway on loopback (`127.0.0.1`, the default). Run the UI and the gateway on the same machine.
 
 `bin/prod` installs dependencies, builds, and hands off to `scripts/serve-on-gateway.sh`, which exports the absolute `HERMES_WEB_DIST` and execs `hermes serve`.
 If a gateway already occupies the target port, stop it first or choose another port, because two gateways cannot share a port.
