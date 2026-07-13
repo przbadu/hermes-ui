@@ -34,9 +34,12 @@ cd /home/przbadu/dev/hermes-apps/hermes-ui
 ```
 
 `bin/dev` proxies to `http://127.0.0.1:9119` by default; override with `HERMES_GATEWAY_URL=http://host:port ./bin/dev`.
-`bin/prod` passes any extra arguments through to `hermes serve`, for example `./bin/prod --host 0.0.0.0 --port 9200`.
+`bin/prod` passes any extra arguments through to `hermes serve`, for example `./bin/prod --port 9200`.
 
 For gateways using OAuth, prefer `bin/prod`: the login redirect must return to the same origin the app was served from, which the gateway-hosted path guarantees.
+
+> [!WARNING]
+> Keep the gateway bound to loopback (`127.0.0.1`, the default). Do not bind it to `0.0.0.0`: that exposes the gateway to every device on your network, and the gateway injects a valid session token into `index.html`, so anyone who can reach the port can load the UI already authenticated. To use the UI from another device, put both machines on a [Tailscale](https://tailscale.com) network and reach the gateway over its private Tailscale address instead of a public bind.
 
 ## Automated setup (for Hermes / AI agents)
 

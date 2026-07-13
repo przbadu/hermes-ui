@@ -45,9 +45,13 @@ Serve the built bundle FROM the gateway so everything is same-origin.
 Prefer the ready-made runner, from the repo root:
 
 ```sh
-./bin/prod                               # builds if needed, then serves from the gateway
-./bin/prod --host 0.0.0.0 --port 9119    # extra args pass straight through to 'hermes serve'
+./bin/prod                # builds if needed, then serves from the gateway
+./bin/prod --port 9200    # extra args pass straight through to 'hermes serve'
 ```
+
+Keep the gateway on loopback (`127.0.0.1`, the default).
+Do not bind it to `0.0.0.0`: the gateway injects a session token into `index.html`, so any device that can reach the port loads the UI already authenticated.
+For access from another machine, use a [Tailscale](https://tailscale.com) network and reach the gateway over its private address instead.
 
 `bin/prod` installs dependencies, builds, and hands off to `scripts/serve-on-gateway.sh`, which exports the absolute `HERMES_WEB_DIST` and execs `hermes serve`.
 If a gateway already occupies the target port, stop it first or choose another port, because two gateways cannot share a port.
