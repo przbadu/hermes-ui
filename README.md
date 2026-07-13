@@ -27,7 +27,7 @@ For the extraction plan and provenance, see:
 Two runners install dependencies and start the app with no manual setup.
 
 ```sh
-cd /home/przbadu/dev/hermes-apps/hermes-ui
+cd $HOME/dev/hermes-apps/hermes-ui
 
 ./bin/dev    # dev server with hot reload; open http://127.0.0.1:5174
 ./bin/prod   # build, then serve the bundle from the gateway (same-origin)
@@ -92,7 +92,7 @@ The Vite build uses `base: './'` (`app/vite.config.ts:13`), so asset URLs in the
 Build the bundle, then start the gateway with `HERMES_WEB_DIST` pointing at the absolute path of `app/dist`.
 
 ```sh
-cd /home/przbadu/dev/hermes-apps/hermes-ui/app
+cd $HOME/dev/hermes-apps/hermes-ui/app
 bun install
 bun run build
 ```
@@ -100,13 +100,13 @@ bun run build
 Then start the gateway with the built bundle:
 
 ```sh
-HERMES_WEB_DIST=/home/przbadu/dev/hermes-apps/hermes-ui/app/dist hermes serve
+HERMES_WEB_DIST=$HOME/dev/hermes-apps/hermes-ui/app/dist hermes serve
 ```
 
 Or use the helper, which resolves the absolute path and exports the variable for you:
 
 ```sh
-/home/przbadu/dev/hermes-apps/hermes-ui/scripts/serve-on-gateway.sh
+$HOME/dev/hermes-apps/hermes-ui/scripts/serve-on-gateway.sh
 ```
 
 Open the gateway's URL (default `http://127.0.0.1:9119`).
@@ -120,7 +120,7 @@ For local development with hot reload, run the Vite dev server.
 The browser only ever talks to the Vite origin (`http://127.0.0.1:5174`); Vite proxies `/api`, `/auth`, and `/login` (including the WebSocket upgrade) to the gateway, keeping the browser same-origin with the dev server.
 
 ```sh
-cd /home/przbadu/dev/hermes-apps/hermes-ui/app
+cd $HOME/dev/hermes-apps/hermes-ui/app
 bun install
 bun run dev
 ```
