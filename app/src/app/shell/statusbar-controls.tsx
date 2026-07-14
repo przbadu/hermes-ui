@@ -61,7 +61,10 @@ export function StatusbarControls({ className, leftItems = [], items = [], ...pr
   return (
     <footer
       className={cn(
-        'flex h-5 shrink-0 items-stretch justify-between gap-2 border-t border-(--ui-stroke-tertiary) bg-(--ui-sidebar-surface-background) px-1 py-0 text-(--ui-text-tertiary) [-webkit-app-region:no-drag]',
+        // min-h-5 (not h-5) + a bottom safe-area pad so the bar's background
+        // bleeds under the home indicator while its content stays above it. Both
+        // collapse to the original 20px bar on desktop (safe-area = 0).
+        'flex min-h-5 shrink-0 items-stretch justify-between gap-2 border-t border-(--ui-stroke-tertiary) bg-(--ui-sidebar-surface-background) px-1 py-0 pb-[var(--safe-area-bottom)] text-(--ui-text-tertiary) [-webkit-app-region:no-drag]',
         className
       )}
       data-slot="statusbar"
