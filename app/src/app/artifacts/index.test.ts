@@ -67,6 +67,48 @@ describe('collectArtifactsForSession', () => {
     })
   })
 
+  it('indexes a screenshot the user attached (gateway description-block marker)', () => {
+    const messages: SessionMessage[] = [
+      {
+        content: [
+          '[The user attached an image:',
+          'A screenshot of the app with a bracketed [note].]',
+          '[You can examine it with vision_analyze using image_url: /home/u/.hermes/images/upload_1.png]',
+          '',
+          'what is wrong here?'
+        ].join('\n'),
+        role: 'user',
+        timestamp: 4000
+      }
+    ]
+
+    const artifacts = collectArtifactsForSession(makeSession({ id: 'session-3' }), messages)
+
+    expect(artifacts).toHaveLength(1)
+    expect(artifacts[0]).toMatchObject({
+      kind: 'image',
+      value: '/home/u/.hermes/images/upload_1.png'
+    })
+  })
+
+  it('indexes a screenshot from the legacy "Image attached at" marker', () => {
+    const messages: SessionMessage[] = [
+      {
+        content: 'still broken\n\n[Image attached at: /home/u/.hermes/images/clip_1.png]\n[screenshot]',
+        role: 'user',
+        timestamp: 4100
+      }
+    ]
+
+    const artifacts = collectArtifactsForSession(makeSession({ id: 'session-4' }), messages)
+
+    expect(artifacts).toHaveLength(1)
+    expect(artifacts[0]).toMatchObject({
+      kind: 'image',
+      value: '/home/u/.hermes/images/clip_1.png'
+    })
+  })
+
   it('resolves remote image artifact thumbnails through the desktop fs bridge', async () => {
     const api = vi.fn(async ({ path }: { path: string }) => {
       if (path.startsWith('/api/fs/read-data-url?')) {

@@ -1,5 +1,6 @@
 import type { ThreadMessageLike } from '@assistant-ui/react'
 
+import { rewriteAttachedImageMarkers } from '@/lib/embedded-images'
 import { dedupeGeneratedImageEchoesInParts } from '@/lib/generated-images'
 import { mediaDisplayLabel, mediaMarkdownHref } from '@/lib/media'
 import { normalize } from '@/lib/text'
@@ -180,14 +181,16 @@ function displayContentForMessage(role: SessionMessage['role'], content: unknown
   const marker = textContent.match(ATTACHED_CONTEXT_MARKER_RE)
 
   if (!marker || marker.index === undefined) {
-    return textContent.replace(CONTEXT_WARNINGS_MARKER_RE, '').trim()
+    // Turn the gateway's attached-image markers back into `@image:` directives
+    // so a reloaded screenshot renders inline instead of as raw description text.
+    return rewriteAttachedImageMarkers(textContent.replace(CONTEXT_WARNINGS_MARKER_RE, '').trim())
   }
 
   const visibleText = textContent.slice(0, marker.index).replace(CONTEXT_WARNINGS_MARKER_RE, '').trim()
   const attachedContext = textContent.slice(marker.index + marker[0].length)
   const refs = [...new Set(Array.from(attachedContext.matchAll(CONTEXT_REF_RE)).map(match => match[0]))]
 
-  return [refs.join('\n'), visibleText].filter(Boolean).join('\n\n') || visibleText
+  return rewriteAttachedImageMarkers([refs.join('\n'), visibleText].filter(Boolean).join('\n\n') || visibleText)
 }
 
 const STREAM_PART: Record<'reasoning' | 'text', (text: string) => ChatMessagePart> = {

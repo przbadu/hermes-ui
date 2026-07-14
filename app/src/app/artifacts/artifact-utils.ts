@@ -1,4 +1,5 @@
 import { readDesktopFileDataUrl } from '@/lib/desktop-fs'
+import { attachedImagePaths } from '@/lib/embedded-images'
 import { filePathFromMediaPath, isRemoteGateway, mediaExternalUrl } from '@/lib/media'
 import type { SessionInfo, SessionMessage } from '@/types/hermes'
 
@@ -202,6 +203,17 @@ function collectArtifactsFromText(text: string, pushValue: (value: string) => vo
 function collectArtifactsFromMessage(message: SessionMessage, pushValue: (value: string) => void): void {
   const text = messageText(message)
 
+  // User-attached screenshots are persisted as gateway markers (a file path
+  // wrapped in a natural-language block), not markdown/URLs, so the generic
+  // text scan misses them. Surface them as artifacts on their own.
+  if (message.role === 'user') {
+    for (const path of attachedImagePaths(text)) {
+      pushValue(path)
+    }
+
+    return
+  }
+
   if (text) {
     collectArtifactsFromText(text, pushValue)
   }
@@ -248,7 +260,7 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
   const title = artifactSessionTitle(session)
 
   for (const message of messages) {
-    if (message.role !== 'assistant' && message.role !== 'tool') {
+    if (message.role !== 'assistant' && message.role !== 'tool' && message.role !== 'user') {
       continue
     }
 
