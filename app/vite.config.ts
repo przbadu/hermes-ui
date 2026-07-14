@@ -317,11 +317,15 @@ export default defineConfig({
       workbox: {
         // Precache the built app shell. Workbox rewrites the manifest with the
         // content-hashed filenames Vite emits, so nothing is hardcoded here.
+        // The `**/*.js` glob matches every emitted chunk (entry + the async
+        // vendor chunks split out in build.rolldownOptions), so the whole app
+        // - including lazily-loaded routes - stays precached and offline-ready.
         globPatterns: ['**/*.{js,css,html,woff,woff2,ttf,otf,eot,png,jpg,jpeg,svg,gif,webp,ico}'],
-        // This app ships as one large single-chunk bundle (code splitting is
-        // disabled in build.rolldownOptions), so the shell JS is ~28 MB. Raise
-        // the precache size cap above it, otherwise the core bundle is skipped
-        // and the app is not offline-capable.
+        // Code splitting is enabled (build.rolldownOptions), so the bundle is
+        // now many smaller hashed chunks rather than one ~28 MB file; the
+        // per-file cap is no longer the binding constraint. Kept generous so
+        // even the largest split vendor chunk is always precached - a chunk
+        // over the cap would be silently skipped and break offline use.
         maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
         // Serve index.html for real navigations so deep hash routes and hard
         // refreshes work offline...
@@ -346,12 +350,48 @@ export default defineConfig({
     postcss: { plugins: [] }
   },
   build: {
-    // Shiki ships many dynamic chunks by default; keep the single-chunk
-    // upstream behavior so the gateway's static host serves one bundle.
-    chunkSizeWarningLimit: 25000,
+    // Split chunks are content-hashed and served under ./assets from one
+    // origin (base: './'), so a multi-chunk bundle is served fine by the
+    // gateway's static host. This warns only if a single chunk is still huge.
+    chunkSizeWarningLimit: 4000,
     rolldownOptions: {
+      // Rolldown (rolldown-vite) drives the build, so chunking config lives
+      // here rather than under rollupOptions. `codeSplitting` accepts a boolean
+      // or a CodeSplittingOptions object; the object form both ENABLES splitting
+      // and declares advanced chunk groups (rolldown's replacement for rollup's
+      // manualChunks - see rolldown's CodeSplittingOptions type).
+      //
+      // Enabling splitting is the whole point: it lets the lazy() route
+      // boundaries in desktop-controller and the libraries' own dynamic imports
+      // (shiki loads each language on demand, mermaid each diagram type) pay off.
+      // Those were inlined into one ~27 MB chunk while splitting was off. With
+      // it on, the boot-critical static-import closure drops to ~4 MB and the
+      // parse-costly libs - mermaid, shiki, @xterm, @codemirror - fall out of it
+      // into async chunks, loaded only when their feature is opened.
+      //
+      // We deliberately DON'T force those heavy libs into manual groups. shiki,
+      // codemirror, xterm and katex are each partially reachable from the boot
+      // path (the chat view highlights code at load), so collapsing all of a
+      // library's modules into one named chunk promotes that entire chunk -
+      // including every lazily-loadable language/diagram - back onto the boot
+      // path, undoing the win (measured: ~26 MB boot-critical with such groups
+      // vs ~4 MB without). rolldown's automatic splitting already keeps the
+      // boot-reachable slivers separate from the async bulk, so we let it.
+      //
+      // The one group we do keep is react/react-dom: it is boot-critical either
+      // way, so pinning it to a stable, content-addressed vendor chunk costs no
+      // boot bytes and improves cross-deploy cache hits. `[\\/]` matches the
+      // path separator cross-platform (rolldown's guidance).
       output: {
-        codeSplitting: false
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              priority: 10
+            }
+          ]
+        }
       }
     }
   },
