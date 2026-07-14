@@ -17,6 +17,7 @@ import { HapticsProvider } from './components/haptics-provider'
 import { I18nProvider } from './i18n'
 import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
+import { initQueryPersistence } from './lib/query-persist'
 import { registerPwa } from './pwa/register'
 import { initShellSnapshot } from './store/shell-snapshot'
 import { initSidebarCache } from './store/sidebar-cache'
@@ -28,6 +29,9 @@ initShellSnapshot()
 // Seed the sidebar recents from the per-(gateway,profile) cache before the first
 // render, so real rows paint the instant React mounts (then revalidate).
 initSidebarCache()
+// Seed allowlisted, read-only React Query results (config, skills, toolsets, MCP
+// catalog) from the per-gateway cache before render, then write-through changes.
+initQueryPersistence()
 
 // Dev-only: install __PERF_DRIVE__ + __PERF_PROBE__ on window so the
 // scripts/ harnesses can drive a synthetic stream + record render cost.
