@@ -38,6 +38,9 @@ declare global {
     __HERMES_BASE_PATH__?: string
     /** Dev only: the gateway origin the Vite proxy forwards to (see vite.config.ts). */
     __HERMES_DEV_PROXY_TARGET__?: string
+    /** Dev only: gateway origins the developer whitelisted as reachable
+     *  (HERMES_GATEWAY_URL + repo-root config.json; see vite.config.ts). */
+    __HERMES_GATEWAY_WHITELIST__?: string[]
   }
 }
 

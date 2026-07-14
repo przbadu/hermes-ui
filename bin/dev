@@ -11,6 +11,11 @@
 #   bin/dev                                  # proxy to http://127.0.0.1:9119
 #   HERMES_GATEWAY_URL=http://host:port bin/dev
 #
+# HERMES_GATEWAY_URL picks the single gateway proxied same-origin. To whitelist
+# additional gateway URLs so they can be added by hand in Settings without being
+# blocked as cross-origin, copy config.example.json to config.json (git-ignored)
+# and list them there. Any loopback gateway is allowed without listing it.
+#
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

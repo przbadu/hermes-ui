@@ -93,17 +93,52 @@ export function normalizeBase(url: string): string {
 /**
  * Why a gateway `url` can't be reached from THIS browser, or `null` when it can.
  *
- * A browser tab can only talk to a SAME-ORIGIN gateway: the serving origin, a
- * `/prefix` on it, or - in dev - an absolute URL the Vite proxy forwards to
- * (all resolve to the serving origin via `normalizeBase`). An absolute URL on
- * another origin is blocked before it's useful:
- *   - `mixed-content`: an https page cannot fetch an http gateway at all.
- *   - `cross-origin`: the gateway's CORS is localhost-only and its session
- *     cookie is `SameSite=Lax`, so REST/WS/auth are rejected cross-origin.
- * Unlike Electron, the browser cannot get around either. Returns a reason so the
- * UI can explain the real cause instead of a misleading "check the URL".
+ * A browser tab can reach:
+ *   - a SAME-ORIGIN gateway: the serving origin, a `/prefix` on it, or - in dev -
+ *     the URL the Vite proxy forwards to (all resolved to the serving origin by
+ *     `normalizeBase`);
+ *   - any LOOPBACK gateway when the app is itself served from loopback
+ *     (localhost:5174 -> localhost:9200): same-site, only the port differs;
+ *   - any WHITELISTED gateway - an origin the developer explicitly trusts via
+ *     `HERMES_GATEWAY_URL` or repo-root `config.json` (injected as
+ *     `__HERMES_GATEWAY_WHITELIST__`). This is how you opt a remote gateway in:
+ *     the Hermes gateway's CORS trusts the localhost app origin and the app
+ *     authenticates with a header token + `?token=` WS param, so token-auth REST
+ *     and WS work directly, no cookie crossing origins.
+ * The only hard block is `mixed-content` (an https page cannot fetch an http
+ * gateway at all). Anything else non-loopback and un-whitelisted is reported as
+ * `cross-origin` so the UI can explain it instead of firing a doomed request.
+ * OAuth *cookie* sessions still require same-origin (no cross-origin
+ * Access-Control-Allow-Credentials); that path guards itself and points the user
+ * at a token or the dev proxy.
  */
 export type GatewayReachBlock = 'mixed-content' | 'cross-origin'
+
+/** Loopback hosts, which the browser treats as one site regardless of port. */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase()
+
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost')
+}
+
+/**
+ * Origins the developer has whitelisted as reachable, from `HERMES_GATEWAY_URL`
+ * plus repo-root `config.json` (see app/vite.config.ts). Dev-only; empty in a
+ * production build. Compared by URL origin, so a trailing path/slash is ignored.
+ */
+function isWhitelistedGateway(target: URL): boolean {
+  const list = window.__HERMES_GATEWAY_WHITELIST__
+
+  if (!Array.isArray(list)) {return false}
+
+  return list.some(entry => {
+    try {
+      return new URL(entry).origin === target.origin
+    } catch {
+      return false
+    }
+  })
+}
 
 export function classifyGatewayReach(url: string): GatewayReachBlock | null {
   try {
@@ -111,7 +146,17 @@ export function classifyGatewayReach(url: string): GatewayReachBlock | null {
 
     if (target.origin === window.location.origin) {return null}
 
+    // An https page can never fetch an http gateway, whitelisted or not.
     if (window.location.protocol === 'https:' && target.protocol === 'http:') {return 'mixed-content'}
+
+    // A loopback gateway reached from a loopback app is same-site (only the port
+    // differs) - reachable with no configuration.
+    if (isLoopbackHost(target.hostname) && isLoopbackHost(window.location.hostname)) {return null}
+
+    // A gateway the developer explicitly whitelisted (HERMES_GATEWAY_URL /
+    // config.json). Token-auth REST + WS work directly; adding it in Settings
+    // then connects instead of being pre-blocked.
+    if (isWhitelistedGateway(target)) {return null}
 
     return 'cross-origin'
   } catch {

@@ -67,6 +67,29 @@ It defaults to the origin the app was served from, so the gateway-hosted and dev
 You can point it at another gateway URL (an absolute `https://host` or a `/prefix` path on the serving origin) and choose token or OAuth authentication; the choice is saved in the browser.
 The same-origin constraint below still applies to whatever URL you enter.
 
+You can save multiple gateways (personal, company, and so on) and switch between them; the list lives in the browser.
+
+### Whitelisting gateways in `config.json`
+
+`HERMES_GATEWAY_URL` picks the single gateway the dev server proxies same-origin.
+By default the browser blocks any other non-loopback gateway you type into Settings, because the gateway trusts only same-origin (or localhost) callers.
+To whitelist additional gateways so you can add them by hand in Settings and have them connect, copy `config.example.json` to `config.json` in the repo root and list their URLs:
+
+```json
+{
+  "gateways": [
+    "http://203.0.113.10:9119",
+    "https://hermes.example.com"
+  ]
+}
+```
+
+`config.json` is git-ignored, so it never leaks your gateway URLs into version control.
+The dev server reads it, merges the URLs with `HERMES_GATEWAY_URL`, and hands the whitelist to the app; a whitelisted gateway is no longer pre-blocked, so adding it in Settings actually connects (token auth works directly, since the gateway's CORS trusts the localhost dev origin).
+This does **not** add anything to your saved gateway list - you still add each gateway yourself in Settings when you want it; the whitelist only decides which ones are allowed to connect.
+It is a dev-time mechanism: `bin/dev` (Vite) injects the whitelist, and the gateway-hosted production path does not read `config.json`.
+Loopback gateways (`localhost` / `127.0.0.1`) are always allowed and never need a `config.json` entry.
+
 ## Why same-origin is mandatory
 
 The gateway is locked down to same-origin browsers and cannot be talked to cross-origin:
@@ -77,6 +100,16 @@ The gateway is locked down to same-origin browsers and cannot be talked to cross
 
 Serving the built bundle from the gateway itself (option A) makes the UI, REST, auth, and WebSocket all share one origin, so cookies, CORS, and the WebSocket all work with no extra configuration.
 The dev proxy (option B) and a reverse proxy (option C) are the two ways to preserve that same-origin property without hosting on the gateway directly.
+
+### Exception: loopback gateways
+
+When the app itself is served from loopback (`localhost` or `127.0.0.1`), it can reach any other loopback gateway directly, even on a different port, with no proxy.
+Those origins are same-site (only the port differs), and everything the browser needs already lines up: the gateway's CORS allows localhost origins, the app sends its credentials in an `X-Hermes-Session-Token` header for REST and a `?token=` query param for the WebSocket, so no cookie ever has to cross origins.
+This is why a localhost gateway just works once you add it in Settings -> Gateway, and why it does not need a `config.json` entry to be reachable.
+
+OAuth cookie sessions are the one thing that still cannot cross origins: the gateway sends no `Access-Control-Allow-Credentials`, so its `SameSite=Lax` session cookie is never accepted cross-origin.
+For a cross-port loopback gateway, use a **session token** instead of OAuth.
+The blanket same-origin requirement above still holds for every non-loopback origin.
 
 ## How the gateway hosts the bundle
 
@@ -139,6 +172,9 @@ If the gateway runs on a different host or port, set `HERMES_GATEWAY_URL` before
 ```sh
 HERMES_GATEWAY_URL=http://127.0.0.1:9200 bun run dev
 ```
+
+`HERMES_GATEWAY_URL` picks the single gateway the browser talks to same-origin through the proxy.
+To whitelist additional gateways you can add by hand in Settings, list them in a repo-root `config.json` (see [Whitelisting gateways in `config.json`](#whitelisting-gateways-in-configjson) above).
 
 ### C. Reverse proxy
 

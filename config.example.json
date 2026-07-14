@@ -1,0 +1,6 @@
+{
+  "gateways": [
+    "http://203.0.113.10:9119",
+    "https://hermes.example.com"
+  ]
+}
