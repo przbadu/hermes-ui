@@ -18,10 +18,12 @@ import { I18nProvider } from './i18n'
 import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
 import { registerPwa } from './pwa/register'
+import { initShellSnapshot } from './store/shell-snapshot'
 import { ThemeProvider } from './themes/context'
 
 installClipboardShim()
 registerPwa()
+initShellSnapshot()
 
 // Dev-only: install __PERF_DRIVE__ + __PERF_PROBE__ on window so the
 // scripts/ harnesses can drive a synthetic stream + record render cost.
@@ -38,7 +40,11 @@ if (import.meta.env.MODE !== 'production') {
 if (new URLSearchParams(window.location.search).get('win') === 'overlay') {
   void import('./app/pet-overlay/overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
 } else {
-  createRoot(document.getElementById('root')!).render(
+  const rootEl = document.getElementById('root')!
+  // Drop the pre-hydration skeleton (injected by the inline script in
+  // index.html) so React mounts into a clean container with no flash of both.
+  rootEl.replaceChildren()
+  createRoot(rootEl).render(
     <StrictMode>
       <ErrorBoundary label="root">
         <QueryClientProvider client={queryClient}>

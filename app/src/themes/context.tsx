@@ -15,6 +15,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { matchesQuery, useMediaQuery } from '@/hooks/use-media-query'
 import { persistString, persistStringRecord, storedString, storedStringRecord } from '@/lib/storage'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
+import { refreshShellSnapshot } from '@/store/shell-snapshot'
 
 import { hexToRgb, mix, readableOn } from './color'
 import { BUILTIN_THEME_LIST, BUILTIN_THEMES, DEFAULT_SKIN_NAME, DEFAULT_TYPOGRAPHY, nousTheme } from './presets'
@@ -254,6 +255,10 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark') {
     document.head.appendChild(link)
     INJECTED_FONT_URLS.add(typo.fontUrl)
   }
+
+  // Now that the theme's surface colors are live on :root, refresh the shell
+  // snapshot so the next cold boot's pre-paint skeleton matches this theme.
+  refreshShellSnapshot()
 }
 
 // Pin Electron's nativeTheme to the app's mode so the NATIVE window chrome
