@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,53 @@ import {
 } from '@/web-bridge/gateways'
 
 import { Pill } from './primitives'
+
+/**
+ * The editable name for one saved gateway. Kept in local state while focused so
+ * the field can be fully cleared and retyped - the store guards against an empty
+ * name, so binding the input straight to it would snap a deleted name back on
+ * every keystroke. The typed value is committed on blur (trimmed); left empty,
+ * it reverts to the current name rather than persisting a blank. Focusing the
+ * field selects all text so a tap replaces the name in one go.
+ */
+function GatewayNameField({
+  id,
+  label,
+  name,
+  placeholder
+}: {
+  id: string
+  label: string
+  name: string
+  placeholder: string
+}) {
+  const [value, setValue] = useState(name)
+
+  // Resync when the stored name changes from elsewhere (switching, sanitize).
+  useEffect(() => {
+    setValue(name)
+  }, [name])
+
+  return (
+    <Input
+      aria-label={label}
+      className="h-7 text-[length:var(--conversation-caption-font-size)]"
+      onBlur={() => {
+        const next = value.trim()
+
+        if (next) {
+          if (next !== name) {updateGateway(id, { name: next })}
+        } else {
+          setValue(name)
+        }
+      }}
+      onChange={event => setValue(event.target.value)}
+      onFocus={event => event.target.select()}
+      placeholder={placeholder}
+      value={value}
+    />
+  )
+}
 
 /**
  * Manage the list of gateway connections (personal, company, ...). A gateway is
@@ -55,12 +103,11 @@ export function GatewayManager() {
               key={gateway.id}
             >
               <div className="grid min-w-0 flex-1 gap-1">
-                <Input
-                  aria-label={g.name}
-                  className="h-7 text-[length:var(--conversation-caption-font-size)]"
-                  onChange={event => updateGateway(gateway.id, { name: event.target.value })}
+                <GatewayNameField
+                  id={gateway.id}
+                  label={g.name}
+                  name={gateway.name}
                   placeholder={g.namePlaceholder}
-                  value={gateway.name}
                 />
                 <div className="truncate text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
                   {summary}
