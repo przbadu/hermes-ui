@@ -19,11 +19,15 @@ import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
 import { registerPwa } from './pwa/register'
 import { initShellSnapshot } from './store/shell-snapshot'
+import { initSidebarCache } from './store/sidebar-cache'
 import { ThemeProvider } from './themes/context'
 
 installClipboardShim()
 registerPwa()
 initShellSnapshot()
+// Seed the sidebar recents from the per-(gateway,profile) cache before the first
+// render, so real rows paint the instant React mounts (then revalidate).
+initSidebarCache()
 
 // Dev-only: install __PERF_DRIVE__ + __PERF_PROBE__ on window so the
 // scripts/ harnesses can drive a synthetic stream + record render cost.
