@@ -30,14 +30,26 @@ import type {
   HermesNotification
 } from '@/global'
 
-import { classifyGatewayReach, getActiveGateway, normalizeBase, servingBase, updateGateway } from './gateways'
+import {
+  activeUpstreamOrigin,
+  classifyGatewayReach,
+  getActiveGateway,
+  normalizeBase,
+  servingBase,
+  syncDevGatewayCookie,
+  updateGateway,
+  upstreamOriginFor,
+  withGatewayRoute
+} from './gateways'
 
 declare global {
   interface Window {
     __HERMES_SESSION_TOKEN__?: string
     __HERMES_BASE_PATH__?: string
-    /** Dev only: the gateway origin the Vite proxy forwards to (see vite.config.ts). */
-    __HERMES_DEV_PROXY_TARGET__?: string
+    /** Dev only: gateway origins the developer whitelisted as reachable, folded
+     *  through the dev proxy (HERMES_GATEWAY_URL + config.json +
+     *  HERMES_GATEWAY_WHITELIST; see vite.config.ts). */
+    __HERMES_GATEWAY_WHITELIST__?: string[]
   }
 }
 
@@ -127,8 +139,8 @@ function buildTokenWsUrl(token: string): string {
   return `${wsBaseUrl()}/api/ws?token=${encodeURIComponent(token)}`
 }
 
-async function mintWsTicket(): Promise<string> {
-  const res = await fetch(`${baseUrl()}/api/auth/ws-ticket`, {
+async function mintWsTicket(origin: string | null): Promise<string> {
+  const res = await fetch(withGatewayRoute(`${baseUrl()}/api/auth/ws-ticket`, origin), {
     method: 'POST',
     credentials: 'same-origin'
   })
@@ -151,13 +163,16 @@ async function mintWsTicket(): Promise<string> {
  * failure reports not-connected so the UI offers a sign-in path rather than
  * falsely claiming a live session.
  */
-async function probeAuthConnected(base: string = baseUrl()): Promise<boolean> {
+async function probeAuthConnected(
+  base: string = baseUrl(),
+  origin: string | null = activeUpstreamOrigin()
+): Promise<boolean> {
   if (resolveToken()) {
     return true
   }
 
   try {
-    const res = await fetch(`${base}/api/auth/me`, {
+    const res = await fetch(withGatewayRoute(`${base}/api/auth/me`, origin), {
       credentials: 'same-origin',
       signal: AbortSignal.timeout(6_000)
     })
@@ -193,9 +208,13 @@ function isSameOrigin(base: string): boolean {
  * if the popup is blocked, the user closes it before finishing, or the login
  * doesn't complete within the timeout.
  */
-function openOauthLoginPopup(base: string): Promise<DesktopOauthLoginResult> {
+function openOauthLoginPopup(base: string, origin: string | null): Promise<DesktopOauthLoginResult> {
   return new Promise(resolve => {
-    const popup = window.open(`${base}/login`, 'hermes-oauth-login', 'width=520,height=720')
+    const popup = window.open(
+      withGatewayRoute(`${base}/login`, origin),
+      'hermes-oauth-login',
+      'width=520,height=720'
+    )
 
     if (!popup) {
       resolve({ ok: false, baseUrl: base, connected: false })
@@ -239,7 +258,7 @@ function openOauthLoginPopup(base: string): Promise<DesktopOauthLoginResult> {
       void (async () => {
         if (settled) {return}
 
-        if (await probeAuthConnected(base)) {
+        if (await probeAuthConnected(base, origin)) {
           finish(true)
 
           return
@@ -270,7 +289,7 @@ async function apiFetch<T>(request: HermesApiRequest): Promise<T> {
 
   if (token) {headers['X-Hermes-Session-Token'] = token}
 
-  const res = await fetch(url, {
+  const res = await fetch(withGatewayRoute(url, activeUpstreamOrigin()), {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -344,9 +363,10 @@ async function toConnectionConfig(stored: StoredConnection): Promise<DesktopConn
 
 /** GET /api/status against an arbitrary base, bypassing the auth header path. */
 async function fetchStatus(
-  base: string
+  base: string,
+  origin: string | null = null
 ): Promise<{ auth_providers?: string[]; auth_required?: boolean; version?: string } | null> {
-  const res = await fetch(`${base}/api/status`, {
+  const res = await fetch(withGatewayRoute(`${base}/api/status`, origin), {
     credentials: 'same-origin',
     signal: AbortSignal.timeout(8_000)
   })
@@ -407,12 +427,15 @@ export function createWebBridge(): Window['hermesDesktop'] {
     revalidateConnection: async () => ({ ok: true, rebuilt: false }),
     touchBackend: async () => ({ ok: true }),
     getGatewayWsUrl: async () => {
+      // One origin for both the ticket mint and the socket connect, so the dev
+      // proxy routes them to the same gateway (a mismatch would 4403).
+      const origin = activeUpstreamOrigin()
       const token = resolveToken()
 
-      if (token) {return buildTokenWsUrl(token)}
-      const ticket = await mintWsTicket()
+      if (token) {return withGatewayRoute(buildTokenWsUrl(token), origin)}
+      const ticket = await mintWsTicket(origin)
 
-      return `${wsBaseUrl()}/api/ws?ticket=${encodeURIComponent(ticket)}`
+      return withGatewayRoute(`${wsBaseUrl()}/api/ws?ticket=${encodeURIComponent(ticket)}`, origin)
     },
     openSessionWindow: async sessionId => {
       const opened = window.open(`${window.location.pathname}#/${sessionId}`, '_blank', 'noopener')
@@ -449,8 +472,10 @@ export function createWebBridge(): Window['hermesDesktop'] {
       return toConnectionConfig(next)
     },
     testConnectionConfig: async input => {
-      const base = normalizeBase(input?.remoteUrl ?? loadStoredConnection().remoteUrl)
-      const status = await fetchStatus(base)
+      const remoteUrl = input?.remoteUrl ?? loadStoredConnection().remoteUrl
+      const base = normalizeBase(remoteUrl)
+      // Route by the gateway being tested (not the active one).
+      const status = await fetchStatus(base, upstreamOriginFor(remoteUrl))
 
       return { baseUrl: base, ok: true, version: status?.version ?? null }
     },
@@ -468,7 +493,7 @@ export function createWebBridge(): Window['hermesDesktop'] {
       }
 
       try {
-        const status = await fetchStatus(base)
+        const status = await fetchStatus(base, upstreamOriginFor(remoteUrl))
 
         return {
           baseUrl: base,
@@ -491,26 +516,32 @@ export function createWebBridge(): Window['hermesDesktop'] {
     },
     oauthLoginConnectionConfig: async remoteUrl => {
       const base = remoteUrl ? normalizeBase(remoteUrl) : baseUrl()
+      const origin = remoteUrl ? upstreamOriginFor(remoteUrl) : activeUpstreamOrigin()
 
       // A cross-origin absolute URL can never hold a login session in the
-      // browser (see isSameOrigin). Fail loudly with guidance instead of
-      // navigating the tab to the gateway's own dashboard and stranding the
-      // user there - the exact symptom this replaces.
+      // browser (see isSameOrigin). A whitelisted gateway folds to the serving
+      // origin (proxied), so it passes; a genuinely cross-origin one fails loudly
+      // with guidance instead of stranding the user on the gateway's dashboard.
       if (!isSameOrigin(base)) {
         throw new Error(
           `This gateway (${base}) is on a different origin than the app, so the browser ` +
             'will not keep its login session after sign-in. Reach it on the same origin ' +
-            'instead: point the dev proxy (HERMES_GATEWAY_URL) at it and leave the gateway ' +
-            "URL blank, or use a session token. Desktop can use an absolute URL; the browser can't."
+            'instead: whitelist it (HERMES_GATEWAY_URL or config.json) so the dev proxy ' +
+            "folds it same-origin, or use a session token. Desktop can use an absolute URL; the browser can't."
         )
       }
 
-      // Same-origin: mirror the desktop popup so the app stays mounted.
-      return openOauthLoginPopup(base)
+      // Same-origin (incl. a whitelisted gateway folded through the dev proxy):
+      // mirror the desktop popup so the app stays mounted. Sync the routing
+      // cookie first so the IDP callback navigation reaches this gateway.
+      syncDevGatewayCookie()
+
+      return openOauthLoginPopup(base, origin)
     },
     oauthLogoutConnectionConfig: async remoteUrl => {
       const base = remoteUrl ? normalizeBase(remoteUrl) : baseUrl()
-      await fetch(`${base}/auth/logout`, { method: 'POST', credentials: 'same-origin' })
+      const origin = remoteUrl ? upstreamOriginFor(remoteUrl) : activeUpstreamOrigin()
+      await fetch(withGatewayRoute(`${base}/auth/logout`, origin), { method: 'POST', credentials: 'same-origin' })
 
       return { ok: true, connected: false }
     },

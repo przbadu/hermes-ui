@@ -20,6 +20,9 @@ yarn-error.log*
 .env.*
 !.env.example
 
+# Local app config (gateway list, ...). Commit config.example.json instead.
+config.json
+
 # Editor / OS
 .DS_Store
 .idea/
