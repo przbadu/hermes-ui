@@ -280,6 +280,12 @@ function hermesDynamicProxy(): Plugin {
 
 export default defineConfig({
   base: './',
+  // Per-build id, read by the React Query persistence layer as a cache buster so
+  // a redeploy (or dev restart) drops any persisted query blob whose data shape
+  // may have changed. Computed once at config load.
+  define: {
+    __HERMES_BUILD_ID__: JSON.stringify(String(Date.now()))
+  },
   plugins: [
     // Dev only: the dynamic gateway proxy + injection of
     // window.__HERMES_GATEWAY_WHITELIST__ so the client knows which absolute

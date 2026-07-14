@@ -37,6 +37,120 @@
   </head>
   <body>
     <div id="root" class="scrollbar-dt"></div>
+    <script>
+      // Pre-hydration app-shell skeleton. The production app is one large
+      // bundle that takes a couple of seconds to parse/evaluate before React
+      // mounts; without this the window shows a bare themed rectangle the whole
+      // time (the "white flash" on every refresh / gateway switch). Here we draw
+      // a themed titlebar + sidebar rail + placeholder rows so the boot reads as
+      // "app loading" instead of "broken", matching what is about to mount.
+      //
+      // The colors/dimensions come from a display-only snapshot written by the
+      // running app (see src/store/shell-snapshot.ts). It is purely cosmetic:
+      // no application data is read here, and main.tsx clears it before React
+      // renders. Everything is best-effort inside try/catch, so a missing or
+      // unreadable snapshot simply degrades to the plain themed background.
+      (function () {
+        try {
+          // The pet overlay window (?win=overlay) is a tiny transparent surface,
+          // not the full shell — never draw the skeleton there.
+          if (new URLSearchParams(window.location.search).get('win') === 'overlay') return
+
+          var raw = localStorage.getItem('hermes-shell-snapshot')
+          if (!raw) return
+          var s = JSON.parse(raw)
+          if (!s || s.v !== 1 || !s.sidebarBg) return
+
+          var root = document.getElementById('root')
+          if (!root) return
+
+          var narrow = window.innerWidth < 768
+          var showSidebar = !!s.sidebarOpen && !narrow
+          var width = Math.max(160, Math.min(480, Number(s.sidebarWidth) || 237))
+          var chromeBg = s.chromeBg || getComputedStyle(document.documentElement).backgroundColor
+
+          var style = document.createElement('style')
+          style.textContent =
+            '@keyframes hermes-skeleton-pulse{0%{opacity:.55}100%{opacity:1}}' +
+            '#hermes-skeleton .hs-row{animation:hermes-skeleton-pulse 1.6s ease-in-out infinite alternate}' +
+            '@media (prefers-reduced-motion: reduce){#hermes-skeleton .hs-row{animation:none}}'
+          document.head.appendChild(style)
+
+          var el = function (tag, css) {
+            var n = document.createElement(tag)
+            if (css) for (var k in css) n.style[k] = css[k]
+            return n
+          }
+
+          var shell = el('div', {
+            position: 'fixed',
+            inset: '0',
+            zIndex: '0',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            pointerEvents: 'none',
+            background: chromeBg
+          })
+          shell.id = 'hermes-skeleton'
+          shell.setAttribute('aria-hidden', 'true')
+
+          // Titlebar band (34px + top safe-area, mirroring --titlebar-height).
+          shell.appendChild(
+            el('div', {
+              height: 'calc(34px + env(safe-area-inset-top, 0px))',
+              flex: '0 0 auto',
+              borderBottom: '1px solid ' + (s.sidebarBorder || 'transparent'),
+              background: chromeBg
+            })
+          )
+
+          var bodyRow = el('div', { flex: '1 1 auto', display: 'flex', minHeight: '0' })
+
+          if (showSidebar) {
+            var side = el('div', {
+              width: width + 'px',
+              flex: '0 0 auto',
+              background: s.sidebarBg,
+              borderRight: '1px solid ' + (s.sidebarBorder || 'transparent'),
+              padding: '10px 8px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '3px'
+            })
+            var rowColor = s.rowColor || 'currentColor'
+            // A short section-header bar, then a run of session-row placeholders.
+            var header = el('div', {
+              height: '11px',
+              width: '38%',
+              margin: '2px 0 8px 4px',
+              borderRadius: '4px',
+              background: rowColor,
+              opacity: '0.18'
+            })
+            side.appendChild(header)
+            for (var i = 0; i < 8; i++) {
+              var row = el('div', {
+                height: '1.625rem',
+                borderRadius: '6px',
+                background: rowColor,
+                opacity: String(0.09 + (i % 2) * 0.03)
+              })
+              row.className = 'hs-row'
+              side.appendChild(row)
+            }
+            bodyRow.appendChild(side)
+          }
+
+          // Empty main area — just the themed surface; content lands on mount.
+          bodyRow.appendChild(el('div', { flex: '1 1 auto', minWidth: '0', background: chromeBg }))
+          shell.appendChild(bodyRow)
+          root.appendChild(shell)
+        } catch (e) {
+          // Best-effort only: any failure leaves the themed background in place.
+        }
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

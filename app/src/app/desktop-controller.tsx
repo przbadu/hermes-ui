@@ -13,6 +13,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { isFocusWithin } from '@/lib/keybinds/combo'
 import { cn } from '@/lib/utils'
 import { useSkinCommand } from '@/themes/use-skin-command'
+import { $activeGatewayId } from '@/web-bridge/gateways'
 
 import { formatRefValue } from '../components/assistant-ui/directive-text'
 import { getSessionMessages, type SessionMessage, triggerCronJob } from '../hermes'
@@ -188,6 +189,7 @@ export function DesktopController() {
   const messagingTranscriptSignatureRef = useRef(new Map<string, string>())
 
   const gatewayState = useStore($gatewayState)
+  const activeGatewayId = useStore($activeGatewayId)
   const activeSessionId = useStore($activeSessionId)
   const currentCwd = useStore($currentCwd)
   const freshDraftReady = useStore($freshDraftReady)
@@ -906,7 +908,9 @@ export function DesktopController() {
       gatewayRef.current = g
     },
     refreshHermesConfig,
-    refreshSessions
+    refreshSessions,
+    // Re-boot against the newly-active gateway on a soft switch (no page reload).
+    restartKey: activeGatewayId
   })
 
   useEffect(() => {

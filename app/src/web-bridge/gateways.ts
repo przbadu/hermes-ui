@@ -372,18 +372,31 @@ export function removeGateway(id: string): void {
   commit(store)
 }
 
-/** Set the active gateway. Reloads by default so the app re-boots against it. */
+// Soft switch: swap gateways in-app — the boot hook reboots the socket against
+// the new gateway and the sidebar cache swaps the shell, all keyed off the
+// $activeGatewayId change `commit()` emits below. This avoids the full-page
+// reload (bundle re-parse + blank connecting screen) on every switch. Flip to
+// false to restore the old reload-on-switch behavior as a fallback.
+const SOFT_GATEWAY_SWITCH = true
+
+/**
+ * Set the active gateway. By default this is now a soft in-app swap; pass
+ * `{ reload: true }` to force the legacy full-page reload.
+ */
 export function setActiveGateway(id: string, opts: { reload?: boolean } = {}): void {
   const store = load()
 
   if (!store.gateways.some(g => g.id === id) || store.activeId === id) { return }
   store.activeId = id
+  // Emits $activeGatewayId, which drives the soft swap (boot reboot + sidebar
+  // shell swap). Routing must be updated first so the new socket and any OAuth
+  // callback navigation both target the newly active gateway.
   commit(store)
-  // Dev-only: update routing before the reload, so the reloaded boot and any
-  // OAuth callback navigation both target the newly active gateway.
   syncDevGatewayCookie()
 
-  if (opts.reload !== false) {
+  const reload = opts.reload ?? !SOFT_GATEWAY_SWITCH
+
+  if (reload) {
     setTimeout(() => window.location.reload(), 50)
   }
 }

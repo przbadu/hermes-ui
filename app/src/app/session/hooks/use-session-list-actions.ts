@@ -34,6 +34,7 @@ import {
   setSessionsLoading,
   setSessionsTotal
 } from '@/store/session'
+import { writeSidebarCache } from '@/store/sidebar-cache'
 
 import { sameCronSignature } from '../../desktop-controller-utils'
 
@@ -197,6 +198,10 @@ export function useSessionListActions({ profileScope }: UseSessionListActionsArg
         setSessions(prev => mergeSessionPage(prev, result.sessions, sessionsToKeep()))
         setSessionsTotal(typeof result.total === 'number' ? result.total : result.sessions.length)
         setSessionProfileTotals(result.profile_totals ?? {})
+        // Persist the freshly-loaded page so the next cold boot paints it
+        // instantly. Keyed on the scope we actually fetched, captured here so a
+        // mid-flight profile switch can't file it under the wrong profile.
+        writeSidebarCache(profileScope)
       }
     } finally {
       if (refreshSessionsRequestRef.current === requestId) {
