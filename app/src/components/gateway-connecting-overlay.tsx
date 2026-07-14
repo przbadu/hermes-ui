@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { $desktopBoot } from '@/store/boot'
 import { $gatewayState } from '@/store/session'
+import { $hasCachedShell } from '@/store/sidebar-cache'
 
 // Static, always-legible prefix; only TAIL ever scrambles. Splitting them at
 // the render level means no timer logic (even a stale HMR one) can ever
@@ -48,6 +49,7 @@ function scrambledTail(resolvedCount: number): string {
 export function GatewayConnectingOverlay() {
   const gatewayState = useStore($gatewayState)
   const boot = useStore($desktopBoot)
+  const hasCachedShell = useStore($hasCachedShell)
   const [previewing] = useState(forcedPreview)
   const [tail, setTail] = useState(TAIL)
   const [phase, setPhase] = useState<Phase>('live')
@@ -58,7 +60,11 @@ export function GatewayConnectingOverlay() {
   // the chat then — users should still be able to type drafts, open settings,
   // and recover instead of staring at a modal CONNECTING screen.
   const initialBootActive = boot.visible || boot.running || boot.progress < 100
-  const connecting = gatewayState !== 'open' && !boot.error && initialBootActive
+  // When we already hydrated a cached shell (sidebar rows from a previous
+  // session on this gateway), don't blank over it with the full-screen modal —
+  // show the shell and let the statusbar's gateway pill signal "connecting".
+  // The modal is reserved for a genuine cold start with nothing to display yet.
+  const connecting = gatewayState !== 'open' && !boot.error && initialBootActive && !hasCachedShell
   // Latches once we've actually shown the overlay, so the brief frame where
   // gatewayState flips to "open" (connecting -> false) before the exit phase
   // kicks in doesn't unmount us and cause a flash.

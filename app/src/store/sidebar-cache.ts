@@ -1,14 +1,20 @@
+import { atom } from 'nanostores'
+
 import { $profileScope } from '@/store/profile'
 import {
+  $activeSessionId,
+  $selectedStoredSessionId,
   $sessionProfileTotals,
   $sessions,
   $sessionsTotal,
+  setCurrentBranch,
+  setCurrentCwd,
   setSessionProfileTotals,
   setSessions,
   setSessionsTotal
 } from '@/store/session'
 import type { SessionInfo } from '@/types/hermes'
-import { getActiveGateway } from '@/web-bridge/gateways'
+import { $activeGatewayId, getActiveGateway } from '@/web-bridge/gateways'
 
 // Persist the sidebar's recents list so a cold boot can paint real rows the
 // instant React mounts, then revalidate — instead of an empty list behind the
@@ -35,6 +41,12 @@ const SCHEMA_VERSION = 1
 // localStorage's budget and old contexts are pruned.
 const MAX_ROWS = 60
 const MAX_ENTRIES = 12
+
+// True once we've seeded the sidebar from cache at boot. The full-screen
+// connecting overlay reads this to decide whether it may cover the shell: if we
+// already have a cached shell to show, we render it (with a non-blocking connect
+// indicator in the statusbar) instead of a blank modal over it.
+export const $hasCachedShell = atom<boolean>(false)
 
 interface SidebarSnapshot {
   v: number
@@ -135,6 +147,9 @@ export function hydrateSidebarCache(): void {
     setSessions(snap.sessions)
     setSessionsTotal(typeof snap.total === 'number' ? snap.total : snap.sessions.length)
     setSessionProfileTotals(snap.profileTotals ?? {})
+    // We have real rows to show now, so the connecting overlay must not blank
+    // over them while the socket (re)connects.
+    $hasCachedShell.set(true)
   } catch {
     // Ignore — an empty list is a safe fallback.
   }
@@ -171,14 +186,48 @@ export function writeSidebarCache(profileScope: string): void {
   }
 }
 
-// Hydrate once at boot, then re-seed if the profile scope resolves to a
-// non-default context during boot before the first refresh lands. The empty-list
-// guard in hydrateSidebarCache keeps this from ever clobbering live data, so a
-// runtime profile switch (which leaves the previous rows in place) is untouched.
+// Drop the old gateway's shell state and seed the new gateway's cached rows.
+// Called on a soft gateway switch (no page reload), synchronously with the
+// $activeGatewayId change so the sidebar never flashes the previous gateway's
+// sessions. The boot hook separately re-runs to swap the live socket.
+function swapGatewayShell(): void {
+  // Clear the previous gateway's scoped view so nothing bleeds across.
+  setSessions([])
+  setSessionsTotal(0)
+  setSessionProfileTotals({})
+  $activeSessionId.set(null)
+  $selectedStoredSessionId.set(null)
+  // Clear the workspace too, so the reboot picks up the new gateway's default
+  // cwd/branch (its boot only sets them when both are empty).
+  setCurrentCwd('')
+  setCurrentBranch('')
+  // Reset then re-hydrate: hydrate() sets $hasCachedShell true iff the new
+  // gateway has a cached page, so the connecting overlay behaves correctly for
+  // both a cached and a first-seen gateway.
+  $hasCachedShell.set(false)
+  hydrateSidebarCache()
+}
+
+// Hydrate once at boot, then (a) re-seed if the profile scope resolves to a
+// non-default context during boot before the first refresh lands, and (b) swap
+// the shell when the active gateway changes (soft switch). The empty-list guard
+// in hydrateSidebarCache keeps profile re-seeds from clobbering live data.
 export function initSidebarCache(): void {
   if (typeof window === 'undefined') {
     return
   }
 
   $profileScope.subscribe(() => hydrateSidebarCache())
+
+  // Skip the immediate fire (the initial value at boot, already hydrated above).
+  let firstGatewayFire = true
+  $activeGatewayId.subscribe(() => {
+    if (firstGatewayFire) {
+      firstGatewayFire = false
+
+      return
+    }
+
+    swapGatewayShell()
+  })
 }

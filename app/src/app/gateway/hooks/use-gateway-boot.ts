@@ -55,6 +55,11 @@ interface GatewayBootOptions {
   onGatewayReady: (gateway: HermesGateway | null) => void
   refreshHermesConfig: () => Promise<void>
   refreshSessions: () => Promise<void>
+  // Changing this tears the whole boot down and re-runs it against the now-active
+  // gateway — how a soft gateway switch swaps the live socket without a full page
+  // reload. The effect cleanup already closes the socket + every listener, so a
+  // re-run is a clean reboot.
+  restartKey?: unknown
 }
 
 export function useGatewayBoot({
@@ -62,7 +67,8 @@ export function useGatewayBoot({
   onConnectionReady,
   onGatewayReady,
   refreshHermesConfig,
-  refreshSessions
+  refreshSessions,
+  restartKey
 }: GatewayBootOptions) {
   const callbacksRef = useRef({
     handleGatewayEvent,
@@ -431,5 +437,7 @@ export function useGatewayBoot({
       setPrimaryGateway(null)
       $gateway.set(null)
     }
-  }, [])
+     
+    // through callbacksRef; only restartKey (the active gateway) should reboot.
+  }, [restartKey])
 }
