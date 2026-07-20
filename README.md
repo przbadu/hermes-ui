@@ -92,7 +92,7 @@ This keeps the app tiny, portable, and easy to serve from the gateway itself, fr
 
 **Highlights**
 
-- One renderer, many surfaces - browser, PWA, and (via Capacitor) native mobile.
+- Runs in any modern browser, with a PWA layer for install-to-home-screen.
 - Zero-config same-origin serving when hosted directly from the gateway.
 - Runtime gateway switching - save personal and company gateways and switch between them, all in the browser.
 - Token and OAuth authentication support.
