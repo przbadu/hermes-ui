@@ -228,7 +228,7 @@ export function BootFailureOverlay() {
                 </Button>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground">{remoteReauth ? copy.remoteSignInHint : copy.repairHint}</p>
+            <p className="text-xs text-muted-foreground">{remoteReauth ? copy.remoteSignInHint(label) : copy.repairHint}</p>
           </div>
 
           {logs.length > 0 ? (
