@@ -193,7 +193,7 @@ function OAuthPicker({
           {others.map(p => (
             <ProviderRow key={p.id} onSelect={select} provider={p} />
           ))}
-          <KeyProviderRow onClick={onWantApiKey} />
+          <KeyProviderRow onClick={onWantApiKey} pitch={t.onboarding.openRouterPitch} title="OpenRouter" />
         </>
       )}
       {collapsible && (
