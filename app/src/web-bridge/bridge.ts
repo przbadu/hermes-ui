@@ -70,11 +70,15 @@ interface StoredConnection {
   remoteUrl: string
 }
 
+export function connectionModeForGatewayUrl(url: string): 'local' | 'remote' {
+  return isSameOrigin(normalizeBase(url)) ? 'local' : 'remote'
+}
+
 function loadStoredConnection(): StoredConnection {
   const gateway = getActiveGateway()
 
   return {
-    mode: 'remote',
+    mode: connectionModeForGatewayUrl(gateway.url),
     remoteAuthMode: gateway.authMode,
     remoteToken: gateway.token ?? '',
     remoteUrl: gateway.url || servingBase()
