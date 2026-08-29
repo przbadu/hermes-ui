@@ -54,6 +54,11 @@ export const $bindings = atom<KeybindBindings>(loadBindings())
 
 $bindings.subscribe(persistBindings)
 
+/** Resolve a live binding, falling back to the action's shipped default. */
+export function bindingsFor(id: string, bindings: KeybindBindings = $bindings.get()): string[] {
+  return bindings[id] ?? [...(keybindAction(id)?.defaults ?? [])]
+}
+
 // Reverse lookup combo → actionId for dispatch. First action wins on conflict;
 // the panel/edit overlay surface conflicts so users can resolve them. Keys go
 // through `canonicalizeCombo` so a `ctrl+…` binding resolves everywhere.

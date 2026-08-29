@@ -2003,6 +2003,14 @@ export interface Translations {
   }
 
   zones: {
+    showTabStrip: string
+    hideTabStrip: string
+    showStripTab: (title: string) => string
+    hideStripTab: (title: string) => string
+    lastTabKeptTitle: string
+    lastTabKeptBody: string
+    toggleStripTab: (title: string) => string
+    reload: string
     showHeader: string
     hideHeader: string
     minimize: string
@@ -2013,6 +2021,9 @@ export interface Translations {
     closeOthers: string
     closeToRight: string
     closeAll: string
+    newSessionTab: string
+    newTab: string
+    tabCount: (count: number) => string
     split: (dir: string) => string
     move: (dir: string) => string
     dirUp: string

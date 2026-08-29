@@ -20,6 +20,7 @@ import {
   $messages,
   $sessions,
   $yoloActive,
+  rememberedSessionProfile,
   sessionPinId,
   setActiveSessionId,
   setAwaitingResponse,
@@ -344,8 +345,9 @@ export function useSessionActions({
       // gateway call (no-op when it's already on that profile / single-profile).
       // resolveStoredSession finds the row by id (cheap), so an uncached pasted
       // id loads as fast as a sidebar click instead of hanging on a list scan.
+      const hintedProfile = rememberedSessionProfile(storedSessionId)
       const storedForProfile = await resolveStoredSession(storedSessionId)
-      const sessionProfile = storedForProfile?.profile
+      const sessionProfile = storedForProfile?.profile ?? hintedProfile
 
       if (resumeRequestRef.current !== requestId) {
         return

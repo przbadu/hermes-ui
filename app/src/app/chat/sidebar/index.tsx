@@ -4,7 +4,6 @@ import { useStore } from '@nanostores/react'
 import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { SidebarContributedPane, SidebarPaneStrip, useActiveSidebarPane } from '@/app/contrib/pane-host'
 import { PlatformAvatar } from '@/app/messaging/platform-icon'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -30,7 +29,6 @@ import { cn } from '@/lib/utils'
 import { $cronJobs } from '@/store/cron'
 import {
   $dismissedAutoProjectIds,
-  $panesFlipped,
   $pinnedSessionIds,
   $sidebarAgentsGrouped,
   $sidebarCronOpen,
@@ -237,7 +235,6 @@ export function ChatSidebar({
   // Collapsed-but-overlay-mounted → render the full sidebar, not just the nav rail.
   const overlayMounted = useStore($sidebarOverlayMounted)
   const contentVisible = sidebarOpen || overlayMounted
-  const panesFlipped = useStore($panesFlipped)
   const agentsGrouped = useStore($sidebarAgentsGrouped)
   const showCronSessions = useStore($sidebarShowCronSessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
@@ -1033,17 +1030,11 @@ export function ChatSidebar({
       })
     )
 
-  // Contributed sidebar panes (`area: 'panes'`, dock sessions/center — e.g.
-  // Bot Mode's Bots roster). When one exists, the sidebar grows a
-  // SESSIONS | <PANE> tab strip; the active contributed pane replaces the
-  // sessions body wholesale (it brings its own chrome, search, and footer).
-  const activeContributedPane = useActiveSidebarPane()
-
   return (
     <Sidebar
       className={cn(
         'relative h-full min-w-0 overflow-hidden border-t-0 border-b-0 text-foreground transition-none',
-        panesFlipped ? 'border-l border-r-0' : 'border-r border-l-0',
+        'in-data-[pane-side=left]:border-r in-data-[pane-side=left]:border-l-0 in-data-[pane-side=right]:border-l in-data-[pane-side=right]:border-r-0',
         sidebarOpen
           ? 'border-(--sidebar-edge-border) bg-(--ui-sidebar-surface-background) opacity-100'
           : 'pointer-events-none border-transparent bg-transparent opacity-0',
@@ -1054,22 +1045,7 @@ export function ChatSidebar({
       )}
       collapsible="none"
     >
-      <div className="shrink-0 pt-(--titlebar-height)">
-        <SidebarPaneStrip sessionsLabel="Sessions" />
-      </div>
-      {activeContributedPane ? <SidebarContributedPane pane={activeContributedPane} /> : null}
-      <SidebarContent
-        className={cn(
-          'gap-0 overflow-hidden bg-transparent px-2.5',
-          // The strip already spent the titlebar offset; collapse the nav
-          // group's own titlebar padding (it reads this var) so the sessions
-          // body doesn't double-indent. Hidden entirely while a contributed
-          // pane holds the tab — kept mounted so session polling, search
-          // state, and scroll position survive a tab flip.
-          activeContributedPane && 'hidden',
-          !activeContributedPane && '[--titlebar-height:0px]'
-        )}
-      >
+      <SidebarContent className="gap-0 overflow-hidden bg-transparent px-2.5">
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <SidebarGroupContent>
             <SidebarMenu className="gap-px">

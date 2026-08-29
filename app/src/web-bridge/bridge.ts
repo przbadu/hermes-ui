@@ -274,13 +274,28 @@ function openOauthLoginPopup(base: string, origin: string | null): Promise<Deskt
 
 const DEFAULT_API_TIMEOUT_MS = 30_000
 
+/** Add the profile routing query exactly once. Renderer helpers retain the
+ *  query in `path` for Electron compatibility and also set request.profile;
+ *  the browser bridge must not blindly append a duplicate. */
+export function withApiProfile(url: string, profile: null | string | undefined): string {
+  if (!profile) {
+    return url
+  }
+
+  const encoded = encodeURIComponent(profile)
+
+  if (/[?&]profile=[^&#]*/.test(url)) {
+    return url.replace(/([?&])profile=[^&#]*/, `$1profile=${encoded}`)
+  }
+
+  return `${url}${url.includes('?') ? '&' : '?'}profile=${encoded}`
+}
+
 async function apiFetch<T>(request: HermesApiRequest): Promise<T> {
   const { body, method = 'GET', path, profile, timeoutMs } = request
   let url = baseUrl() + path
 
-  if (profile) {
-    url += `${url.includes('?') ? '&' : '?'}profile=${encodeURIComponent(profile)}`
-  }
+  url = withApiProfile(url, profile)
 
   const token = resolveToken()
   const headers: Record<string, string> = {}

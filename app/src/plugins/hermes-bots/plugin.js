@@ -8621,7 +8621,7 @@ export default {
       // An intra-session drag still sticks until the next launch (the
       // invariant runs at adoption time only — see enforceDockedPanes in the
       // tree store).
-      data: { placement: 'left', width: '260px', dock: { pane: 'sessions', pos: 'center', enforce: true } },
+      data: { placement: 'left', width: '260px', collapsible: true, hideOnly: true, dock: { pane: 'sessions', pos: 'center', enforce: true } },
       render: () => jsx(BotsPane, {})
     })
 
@@ -8644,6 +8644,8 @@ export default {
         title: 'Cronjobs',
         data: {
           placement: 'main',
+          narrowCollapsible: true,
+          narrowSide: 'right',
           dock: { pane: 'workspace', pos: 'right' },
           width: '250px'
         },

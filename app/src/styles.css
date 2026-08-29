@@ -468,6 +468,13 @@
     --safe-area-left: env(safe-area-inset-left, 0px);
   }
 
+  @media (max-width: 768px) and (pointer: coarse) {
+    :root {
+      --titlebar-control-size: 1.5rem;
+      --titlebar-control-height: 1.5rem;
+    }
+  }
+
   html {
     font-size: var(--dt-base-size, 0.875rem);
   }

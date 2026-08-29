@@ -25,6 +25,96 @@ const COMPOSER_FAST_KEY = 'hermes.desktop.composer.fast'
 // empty new-chat. Stored (not runtime) id — the route is keyed by stored id.
 const LAST_SESSION_KEY = 'hermes.desktop.lastSessionId'
 
+// Hidden plugin-owned sessions (notably Bot Mode's canonical chat) do not
+// appear in the sidebar's session rows, so their owning profile cannot always
+// be recovered from $sessions. Remember the explicit profile supplied by the
+// plugin before navigation starts. Persisting this small bounded map also
+// makes a reload on that session route profile-correct.
+const SESSION_PROFILE_HINTS_KEY = 'hermes.desktop.sessionProfileHints.v1'
+const SESSION_PROFILE_HINT_LIMIT = 256
+const sessionProfileHints = new Map<string, string>()
+
+function normalizeSessionProfile(profile: null | string | undefined): string {
+  return (profile ?? '').trim() || 'default'
+}
+
+function rememberSessionProfileHint(sessionId: string, profile: string): boolean {
+  const id = sessionId.trim()
+
+  if (!id) {
+    return false
+  }
+
+  sessionProfileHints.delete(id)
+  sessionProfileHints.set(id, normalizeSessionProfile(profile))
+
+  while (sessionProfileHints.size > SESSION_PROFILE_HINT_LIMIT) {
+    const oldest = sessionProfileHints.keys().next().value
+
+    if (oldest === undefined) {
+      break
+    }
+
+    sessionProfileHints.delete(oldest)
+  }
+
+  return true
+}
+
+function persistSessionProfileHints(): void {
+  persistString(
+    SESSION_PROFILE_HINTS_KEY,
+    sessionProfileHints.size ? JSON.stringify([...sessionProfileHints]) : null
+  )
+}
+
+function hydrateSessionProfileHints(): void {
+  const raw = storedString(SESSION_PROFILE_HINTS_KEY)
+  let stored: unknown
+
+  try {
+    stored = raw ? JSON.parse(raw) : null
+  } catch {
+    return
+  }
+
+  if (!Array.isArray(stored)) {
+    return
+  }
+
+  for (const entry of stored) {
+    if (
+      Array.isArray(entry) &&
+      entry.length === 2 &&
+      typeof entry[0] === 'string' &&
+      typeof entry[1] === 'string'
+    ) {
+      rememberSessionProfileHint(entry[0], entry[1])
+    }
+  }
+}
+
+hydrateSessionProfileHints()
+
+export function setSessionProfileHint(sessionId: string, profile: string): void {
+  if (rememberSessionProfileHint(sessionId, profile)) {
+    persistSessionProfileHints()
+  }
+}
+
+export function rememberedSessionProfile(sessionId: string): string | undefined {
+  return sessionProfileHints.get(sessionId.trim())
+}
+
+/** @internal Tests: clear profile hints in memory and, optionally, storage. */
+export function _resetSessionProfileHintsForTests({ storage = false }: { storage?: boolean } = {}): void {
+  sessionProfileHints.clear()
+
+  if (storage) {
+    persistString(SESSION_PROFILE_HINTS_KEY, null)
+  }
+}
+
 export const getRememberedSessionId = (): null | string => storedString(LAST_SESSION_KEY)
 export const setRememberedSessionId = (id: null | string) => persistString(LAST_SESSION_KEY, id)
 

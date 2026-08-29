@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { $terminalTakeover, setTerminalTakeover } from '@/app/right-sidebar/store'
 import { closeActiveTerminal, createTerminal, cycleTerminal } from '@/app/right-sidebar/terminal/terminals'
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
+import { toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { matchesQuery } from '@/hooks/use-media-query'
 import { PROFILE_SLOT_COUNT, SESSION_SLOT_COUNT } from '@/lib/keybinds/actions'
 import { comboAllowedInInput, comboFromEvent, isEditableTarget } from '@/lib/keybinds/combo'
@@ -177,6 +178,7 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
     'view.prevTerminal': () => $terminalTakeover.get() && cycleTerminal(-1),
     'view.closeTerminal': () => $terminalTakeover.get() && closeActiveTerminal(),
     'view.flipPanes': togglePanesFlipped,
+    'layout.editMode': toggleLayoutEditMode,
 
     'appearance.toggleMode': () => setMode(resolvedMode === 'dark' ? 'light' : 'dark'),
 

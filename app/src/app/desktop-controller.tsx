@@ -7,16 +7,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
-import { contributedPaneWidth, ContributedRightPaneBody, useWorkspaceRightPanes } from '@/app/contrib/pane-host'
+import { LayoutPaneContents } from '@/app/contrib/layout'
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
 import { DesktopInstallOverlay } from '@/components/desktop-install-overlay'
 import { GatewayConnectingOverlay } from '@/components/gateway-connecting-overlay'
 import { DesktopOnboardingOverlay } from '@/components/onboarding'
-import { Pane, PaneMain } from '@/components/pane-shell'
+import { LayoutTreeRoot } from '@/components/pane-shell/tree/renderer'
 import { RemoteDisplayBanner } from '@/components/remote-display-banner'
-import { useMediaQuery } from '@/hooks/use-media-query'
 import { isFocusWithin } from '@/lib/keybinds/combo'
-import { cn } from '@/lib/utils'
 import { useSkinCommand } from '@/themes/use-skin-command'
 import { $activeGatewayId } from '@/web-bridge/gateways'
 
@@ -27,24 +25,8 @@ import { storedSessionIdForNotification } from '../lib/session-ids'
 import { isMessagingSource } from '../lib/session-source'
 import { latestSessionTodos } from '../lib/todos'
 import { setCronFocusJobId } from '../store/cron'
-import {
-  $fileBrowserOpen,
-  $panesFlipped,
-  $pinnedSessionIds,
-  $sidebarShowCronSessions,
-  FILE_BROWSER_DEFAULT_WIDTH,
-  FILE_BROWSER_MAX_WIDTH,
-  FILE_BROWSER_MIN_WIDTH,
-  pinSession,
-  PREVIEW_PANE_ID,
-  restoreWorktree,
-  setSidebarOverlayMounted,
-  SIDEBAR_DEFAULT_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-  unpinSession
-} from '../store/layout'
+import { $pinnedSessionIds, $sidebarShowCronSessions, pinSession, restoreWorktree, unpinSession } from '../store/layout'
 import { respondToApprovalAction } from '../store/native-notifications'
-import { $paneOpen } from '../store/panes'
 import { setPetActivity } from '../store/pet'
 import { setPetScale } from '../store/pet-gallery'
 import {
@@ -55,7 +37,6 @@ import {
 import { $filePreviewTarget, $previewTarget, closeActiveRightRailTab } from '../store/preview'
 import { $activeGatewayProfile, $freshSessionRequest, $profileScope, refreshActiveProfile } from '../store/profile'
 import { $startWorkSessionRequest, followActiveSessionCwd, resolveNewSessionCwd } from '../store/projects'
-import { $reviewOpen, REVIEW_PANE_ID } from '../store/review'
 import {
   $activeSessionId,
   $attentionSessionIds,
@@ -87,18 +68,12 @@ import { isSecondaryWindow } from '../store/windows'
 import { ChatView } from './chat'
 import { requestComposerFocus, requestComposerInsert } from './chat/composer/focus'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
-import {
-  ChatPreviewRail,
-  PREVIEW_RAIL_MAX_WIDTH,
-  PREVIEW_RAIL_MIN_WIDTH,
-  PREVIEW_RAIL_PANE_WIDTH
-} from './chat/right-rail'
+import { ChatPreviewRail } from './chat/right-rail'
 import { ChatSidebar } from './chat/sidebar'
 import { CommandPalette } from './command-palette'
 import { useGatewayBoot } from './gateway/hooks/use-gateway-boot'
 import { useGatewayRequest } from './gateway/hooks/use-gateway-request'
 import { useKeybinds } from './hooks/use-keybinds'
-import { SIDEBAR_COLLAPSE_MEDIA_QUERY } from './layout-constants'
 import { ModelPickerOverlay } from './model-picker-overlay'
 import { ModelVisibilityOverlay } from './model-visibility-overlay'
 import { PetGenerateOverlay } from './pet-generate/pet-generate-overlay'
@@ -128,6 +103,7 @@ import { AppShell } from './shell/app-shell'
 import { useOverlayRouting } from './shell/hooks/use-overlay-routing'
 import { useStatusSnapshot } from './shell/hooks/use-status-snapshot'
 import { useStatusbarItems } from './shell/hooks/use-statusbar-items'
+import { dismissMobileChatSidebar } from './shell/mobile-pane-navigation'
 import { ModelMenuPanel } from './shell/model-menu-panel'
 import type { StatusbarItem } from './shell/statusbar-controls'
 import type { TitlebarTool } from './shell/titlebar-controls'
@@ -205,15 +181,7 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const messagingSessions = useStore($messagingSessions)
   const terminalTakeover = useStore($terminalTakeover)
-  const reviewOpen = useStore($reviewOpen)
-  const fileBrowserOpen = useStore($fileBrowserOpen)
-  const previewPaneOpen = useStore($paneOpen(PREVIEW_PANE_ID))
-  const panesFlipped = useStore($panesFlipped)
   const profileScope = useStore($profileScope)
-  // Below SIDEBAR_COLLAPSE_BREAKPOINT_PX there's no room for a docked rail —
-  // collapse both sidebars (without touching their stored open state) so the
-  // hover-reveal overlay becomes the way in. Restores once it's wide again.
-  const narrowViewport = useMediaQuery(SIDEBAR_COLLAPSE_MEDIA_QUERY)
 
   const routedSessionId = routeSessionId(location.pathname)
   const routeToken = `${location.pathname}:${location.search}:${location.hash}`
@@ -1055,9 +1023,18 @@ export function DesktopController() {
         setCronFocusJobId(jobId)
         navigate(CRON_ROUTE)
       }}
-      onNavigate={selectSidebarItem}
-      onNewSessionInWorkspace={startSessionInWorkspace}
-      onResumeSession={sessionId => navigate(sessionRoute(sessionId))}
+      onNavigate={item => {
+        selectSidebarItem(item)
+        dismissMobileChatSidebar()
+      }}
+      onNewSessionInWorkspace={path => {
+        startSessionInWorkspace(path)
+        dismissMobileChatSidebar()
+      }}
+      onResumeSession={sessionId => {
+        navigate(sessionRoute(sessionId))
+        dismissMobileChatSidebar()
+      }}
       onTriggerCronJob={jobId => {
         void triggerCronJob(jobId)
           .then(() => refreshCronJobs())
@@ -1196,140 +1173,65 @@ export function DesktopController() {
     />
   )
 
-  // Flipped layout mirrors the default: sessions sidebar → right, file
-  // browser + preview rail → left. Same panes, swapped sides.
-  const sidebarSide = panesFlipped ? 'right' : 'left'
-  const railSide = panesFlipped ? 'left' : 'right'
-
-  // Other sidebars docked as real columns on the terminal's rail. Force-collapsed
-  // hover-reveal overlays (narrow window) don't take a column, so they don't count.
-  const railColumnOpen =
-    (chatOpen && Boolean(previewTarget || filePreviewTarget) && previewPaneOpen) ||
-    (chatOpen && !narrowViewport && fileBrowserOpen) ||
-    (chatOpen && Boolean(currentCwd.trim()) && !narrowViewport && reviewOpen)
-
-  // Once the terminal would share its rail with another sidebar, drop it to a
-  // full-width row beneath them rather than cramming in one more skinny column.
-  const terminalAsRow = terminalSidebarOpen && railColumnOpen
-
-  // Contributed right-edge panes (`area: 'panes'`, dock workspace/right) —
-  // e.g. Bot Mode's Cronjobs tile. Registered/unregistered live by plugins, so
-  // this list re-renders on registry mutations. The <Pane> wrappers must be
-  // direct PaneShell children (see pane-host), hence the inline array.
-  const contributedRightPanes = useWorkspaceRightPanes().map(pane => (
-    <Pane
-      disabled={!chatOpen}
-      divider
-      id={`contrib:${pane.id}`}
-      key={`contrib:${pane.id}`}
-      minWidth="200px"
-      resizable
-      side={railSide}
-      width={contributedPaneWidth(pane)}
-    >
-      <ContributedRightPaneBody pane={pane} />
-    </Pane>
-  ))
-
-  const previewPane = (
-    <Pane
-      disabled={!chatOpen || (!previewTarget && !filePreviewTarget)}
-      id={PREVIEW_PANE_ID}
-      key="preview"
-      maxWidth={PREVIEW_RAIL_MAX_WIDTH}
-      minWidth={PREVIEW_RAIL_MIN_WIDTH}
-      resizable
-      side={railSide}
-      width={PREVIEW_RAIL_PANE_WIDTH}
-    >
-      {chatOpen ? (
-        <ChatPreviewRail onRestartServer={restartPreviewServer} setTitlebarToolGroup={setTitlebarToolGroup} />
-      ) : null}
-    </Pane>
+  const workspacePane = (
+    <Routes>
+      <Route element={chatView} index />
+      <Route element={chatView} path=":sessionId" />
+      <Route
+        element={
+          <Suspense fallback={null}>
+            <SkillsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </Suspense>
+        }
+        path="skills"
+      />
+      <Route
+        element={
+          <Suspense fallback={null}>
+            <MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </Suspense>
+        }
+        path="messaging"
+      />
+      <Route
+        element={
+          <Suspense fallback={null}>
+            <ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </Suspense>
+        }
+        path="artifacts"
+      />
+      <Route element={null} path="cron" />
+      <Route element={null} path="profiles" />
+      <Route element={null} path="settings" />
+      <Route element={null} path="command-center" />
+      <Route element={null} path="agents" />
+      <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
+      <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
+      <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
+    </Routes>
   )
 
-  const fileBrowserPane = (
-    <Pane
-      defaultOpen={false}
-      disabled={!chatOpen}
-      forceCollapsed={narrowViewport}
-      hoverReveal
-      id="file-browser"
-      key="file-browser"
-      maxWidth={FILE_BROWSER_MAX_WIDTH}
-      minWidth={FILE_BROWSER_MIN_WIDTH}
-      resizable
-      side={railSide}
-      width={FILE_BROWSER_DEFAULT_WIDTH}
-    >
-      {/* Key on the project (cwd) so switching projects unmounts the old tree and
-          mounts a fresh one straight into its skeleton — no stale-then-blip. */}
+  const layoutPanes = {
+    files: chatOpen ? (
       <RightSidebarPane
         key={currentCwd || 'no-cwd'}
         onActivateFile={path => composer.insertContextPathInlineRef(path)}
         onActivateFolder={path => composer.insertContextPathInlineRef(path, true)}
       />
-    </Pane>
-  )
-
-  const reviewPane = (
-    <Pane
-      defaultOpen
-      // The diff pane only makes sense in a workspace, so force it shut when the
-      // session is detached — "No diffs" then only ever shows inside a project,
-      // never as a second empty panel next to the file browser.
-      // Docked (wide): `reviewOpen` gates it. Narrow: drop `reviewOpen` from the
-      // gate so the pane stays mounted as a collapsed overlay — `toggleReview`
-      // then slides it in/out via the forced-reveal pin, exactly like ⌘B for the
-      // sidebar. Still requires a repo (no diffs to show otherwise).
-      disabled={!chatOpen || !currentCwd.trim() || (!narrowViewport && !reviewOpen)}
-      forceCollapsed={narrowViewport}
-      hoverReveal
-      id={REVIEW_PANE_ID}
-      key="review"
-      maxWidth={FILE_BROWSER_MAX_WIDTH}
-      minWidth={FILE_BROWSER_MIN_WIDTH}
-      // Mobile overlay sits at its min width — compact, doesn't bury the chat.
-      overlayWidth={FILE_BROWSER_MIN_WIDTH}
-      resizable
-      side={railSide}
-      width={FILE_BROWSER_DEFAULT_WIDTH}
-    >
-      <ReviewPane key={currentCwd || 'no-cwd'} />
-    </Pane>
-  )
-
-  const terminalPane = (
-    <Pane
-      bottomRow={terminalAsRow}
-      defaultOpen
-      disabled={!terminalSidebarOpen}
-      divider
-      height="38vh"
-      id="terminal-sidebar"
-      key="terminal-sidebar"
-      maxHeight="80vh"
-      maxWidth="80vw"
-      minHeight="8rem"
-      minWidth="22vw"
-      resizable
-      side={railSide}
-      width="42vw"
-    >
-      {/* As a column the terminal clears the titlebar; as a bottom row it sits
-          below the rail's panes (so it fills its row edge-to-edge) and gets a
-          left border separating it from the chat — the column-mode separator
-          lives on the resize sash, which moves to the top edge as a row. */}
-      <div
-        className={cn(
-          'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-(--ui-editor-surface-background)',
-          terminalAsRow ? 'border-l border-(--ui-stroke-secondary) pt-0' : 'pt-(--titlebar-height)'
-        )}
-      >
+    ) : null,
+    preview: chatOpen ? (
+      <ChatPreviewRail onRestartServer={restartPreviewServer} setTitlebarToolGroup={setTitlebarToolGroup} />
+    ) : null,
+    review: chatOpen && currentCwd.trim() ? <ReviewPane key={currentCwd} /> : null,
+    sessions: isSecondaryWindow() ? null : sidebar,
+    terminal: (
+      <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-(--ui-editor-surface-background) pt-(--titlebar-height)">
         <TerminalPaneChrome />
       </div>
-    </Pane>
-  )
+    ),
+    workspace: workspacePane
+  }
 
   return (
     <AppShell
@@ -1343,70 +1245,9 @@ export function DesktopController() {
       terminalPaneOpen={terminalSidebarOpen}
       titlebarTools={titlebarToolGroups.flat.right}
     >
-      {!isSecondaryWindow() && (
-        <Pane
-          forceCollapsed={narrowViewport}
-          hoverReveal
-          id="chat-sidebar"
-          maxWidth={SIDEBAR_MAX_WIDTH}
-          minWidth={SIDEBAR_DEFAULT_WIDTH}
-          onOverlayActiveChange={setSidebarOverlayMounted}
-          resizable
-          side={sidebarSide}
-          width={`${SIDEBAR_DEFAULT_WIDTH}px`}
-        >
-          {sidebar}
-        </Pane>
-      )}
-      <PaneMain>
-        <Routes>
-          <Route element={chatView} index />
-          <Route element={chatView} path=":sessionId" />
-          <Route
-            element={
-              <Suspense fallback={null}>
-                <SkillsView setStatusbarItemGroup={setStatusbarItemGroup} />
-              </Suspense>
-            }
-            path="skills"
-          />
-          <Route
-            element={
-              <Suspense fallback={null}>
-                <MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />
-              </Suspense>
-            }
-            path="messaging"
-          />
-          <Route
-            element={
-              <Suspense fallback={null}>
-                <ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />
-              </Suspense>
-            }
-            path="artifacts"
-          />
-          <Route element={null} path="cron" />
-          <Route element={null} path="profiles" />
-          <Route element={null} path="settings" />
-          <Route element={null} path="command-center" />
-          <Route element={null} path="agents" />
-          <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
-          <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
-          <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
-        </Routes>
-      </PaneMain>
-      {/*
-        Order within a side maps to column order. Default (rail on the right):
-        main | terminal | preview | file-browser. Flipped (rail on the left):
-        mirror to file-browser | preview | terminal | main so terminal stays
-        adjacent to the chat.
-      */}
-      {panesFlipped ? fileBrowserPane : terminalPane}
-      {contributedRightPanes}
-      {previewPane}
-      {reviewPane}
-      {panesFlipped ? terminalPane : fileBrowserPane}
+      <LayoutPaneContents panes={layoutPanes}>
+        <LayoutTreeRoot />
+      </LayoutPaneContents>
     </AppShell>
   )
 }

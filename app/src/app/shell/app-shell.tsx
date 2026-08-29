@@ -3,7 +3,6 @@ import type { CSSProperties, ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
 
 import { NotificationStack } from '@/components/notifications'
-import { PaneShell } from '@/components/pane-shell'
 import { FloatingPet } from '@/components/pet/floating-pet'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -13,7 +12,8 @@ import {
   $sidebarOpen,
   FILE_BROWSER_DEFAULT_WIDTH,
   FILE_BROWSER_PANE_ID,
-  setSidebarOpen
+  setSidebarOpen,
+  SIDEBAR_DEFAULT_WIDTH
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
 import { $connection } from '@/store/session'
@@ -78,6 +78,9 @@ export function AppShell({
   const fileBrowserOpen = useStore($fileBrowserOpen)
   const panesFlipped = useStore($panesFlipped)
   const narrowViewport = useMediaQuery(SIDEBAR_COLLAPSE_MEDIA_QUERY)
+  // Phone drawers stay predictable: Sessions/Bots enter from the left and
+  // tools from the right. The persisted Desktop mirror resumes when widened.
+  const sidebarSide = narrowViewport || !panesFlipped ? 'left' : 'right'
   const fileBrowserWidthOverride = useStore($paneWidthOverride(FILE_BROWSER_PANE_ID))
   const connection = useStore($connection)
   const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
@@ -113,10 +116,10 @@ export function AppShell({
   // hover-reveal overlay (0px track) below the collapse breakpoint, so the edge
   // is uncovered there regardless of their stored open state. A standalone
   // session window renders no sidebar at all, so its edge is always uncovered.
-  const collapsibleLeftPaneOpen = panesFlipped ? fileBrowserOpen : sidebarOpen
+  const collapsibleLeftPaneOpen = sidebarSide === 'left' ? sidebarOpen : fileBrowserOpen
   // The terminal + preview rails never force-collapse, so when they're the
   // leftmost open pane (flipped layout) they cover the edge even when narrow.
-  const persistentLeftPaneOpen = panesFlipped && (terminalPaneOpen || previewPaneOpen)
+  const persistentLeftPaneOpen = sidebarSide === 'right' && (terminalPaneOpen || previewPaneOpen)
 
   const leftEdgePaneOpen =
     !isSecondaryWindow() && ((!narrowViewport && collapsibleLeftPaneOpen) || persistentLeftPaneOpen)
@@ -134,7 +137,7 @@ export function AppShell({
   // between the pane-tool cluster and the system cluster so they don't sit
   // flush against each other. Modeled as N gaps (N - 1 inner + 1 trailing)
   // to keep the formula generic for any pane-tool count.
-  const SYSTEM_TOOL_COUNT = 4
+  const SYSTEM_TOOL_COUNT = 5
   const paneToolCount = titlebarTools?.filter(tool => !tool.hidden).length ?? 0
   const systemToolsWidth = `calc(${SYSTEM_TOOL_COUNT} * (var(--titlebar-control-size) + 0.25rem))`
 
@@ -146,7 +149,7 @@ export function AppShell({
   //   - file-browser closed → flush against static cluster's left edge
   //   - file-browser open   → flush against the file-browser pane's left edge
   //                           (= preview pane's right edge)
-  const previewToolbarGap = fileBrowserOpen ? fileBrowserWidth : systemToolsWidth
+  const previewToolbarGap = fileBrowserOpen && !narrowViewport ? fileBrowserWidth : systemToolsWidth
 
   // Used by the drag region to know where the rightmost interactive element
   // ends. When pane tools are present, that's `gap + paneCount * controlSize
@@ -165,9 +168,9 @@ export function AppShell({
       open={sidebarOpen}
       style={
         {
-          // Alias for shadcn <Sidebar> descendants. Resolves to the chat-sidebar
-          // pane track via PaneShell's emitted --pane-chat-sidebar-width.
-          '--sidebar-width': 'var(--pane-chat-sidebar-width)',
+          // Alias for shadcn <Sidebar> descendants. The layout tree owns the
+          // actual track; Sidebar still needs its intrinsic content width.
+          '--sidebar-width': `${SIDEBAR_DEFAULT_WIDTH}px`,
           // The titlebar band and its control cluster grow/drop by the top
           // safe-area inset so they clear a notch / status bar on mobile. env()
           // is 0 on desktop and non-notched devices, so the band is byte-for-byte
@@ -202,7 +205,7 @@ export function AppShell({
       )}
 
       <main className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none">
-        <PaneShell className="min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute left-0 top-0 z-1 h-(--titlebar-height) w-(--titlebar-controls-left) [-webkit-app-region:drag]"
@@ -213,10 +216,10 @@ export function AppShell({
           />
 
           {children}
-        </PaneShell>
+        </div>
 
         {/* Fixed overlays scoped to main's stacking context (terminal). Rendered
-            after PaneShell so it paints over pane content, but its z stays under
+            after the layout so it paints over pane content, but its z stays under
             the panes' z-20 resize handles, keeping every pane resizable. */}
         {mainOverlays}
 

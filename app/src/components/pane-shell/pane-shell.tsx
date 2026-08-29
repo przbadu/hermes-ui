@@ -38,6 +38,8 @@ export interface PaneProps {
   forceCollapsed?: boolean
   /** When collapsed, float the contents over the main column on hover/focus instead of hiding them (track stays 0px). */
   hoverReveal?: boolean
+  /** Enables touch edge-swipe open and outward-swipe close while collapsed. */
+  swipeReveal?: boolean
   /**
    * Lay the pane out as a horizontal row beneath its rail (spanning every column on
    * its `side`) instead of as a vertical column. The pane then resizes on the Y axis.
@@ -118,12 +120,69 @@ const HOVER_REVEAL_SHADOW = '0px -18px 18px -5px #00000012'
 // adjacent pane's scrollbar (0.5rem, .scrollbar-dt) — the strip overlays the
 // neighboring scroller's edge, so any overlap makes the scrollbar reveal the
 // pane on hover and swallow its clicks (#44140).
-const HOVER_REVEAL_TRIGGER_WIDTH = 14
 const HOVER_REVEAL_EDGE_GUTTER = 'calc(0.5rem + 2px)'
 
 // Fired (window CustomEvent<{ id }>) to toggle a force-collapsed pane's reveal
 // from the keyboard, since its store-open toggle is a no-op while collapsed.
 export const PANE_TOGGLE_REVEAL_EVENT = 'hermes:pane-toggle-reveal'
+
+type PaneRevealAction = 'close' | 'open' | 'toggle'
+
+interface PaneRevealEventDetail {
+  action?: PaneRevealAction
+  id: string
+}
+
+interface RevealSwipeStart {
+  open: boolean
+  pointerId: number
+  x: number
+  y: number
+}
+
+const PANE_REVEAL_SWIPE_MIN_PX = 44
+const PANE_REVEAL_SWIPE_AXIS_RATIO = 1.2
+
+export function paneRevealActionForSwipe(
+  side: PaneSide,
+  open: boolean,
+  deltaX: number,
+  deltaY: number
+): Exclude<PaneRevealAction, 'toggle'> | null {
+  const horizontal = Math.abs(deltaX)
+
+  if (horizontal < PANE_REVEAL_SWIPE_MIN_PX || horizontal < Math.abs(deltaY) * PANE_REVEAL_SWIPE_AXIS_RATIO) {
+    return null
+  }
+
+  const movingInward = side === 'left' ? deltaX > 0 : deltaX < 0
+
+  if (!open && movingInward) {
+    return 'open'
+  }
+
+  if (open && !movingInward) {
+    return 'close'
+  }
+
+  return null
+}
+
+function capturePointer(element: HTMLDivElement, pointerId: number): void {
+  try {
+    element.setPointerCapture?.(pointerId)
+  } catch {
+    // Older WebKit and synthetic pointer events may not support capture.
+  }
+}
+
+function releasePointer(element: HTMLDivElement, pointerId: number): void {
+  try {
+    element.releasePointerCapture?.(pointerId)
+  } catch {
+    // The pointer can already be released when the browser cancels a gesture.
+  }
+}
 
 const widthToCss = (value: WidthValue | undefined, fallback: string) =>
   value === undefined ? fallback : typeof value === 'number' ? `${value}px` : value
@@ -351,12 +410,14 @@ export function Pane({
   minWidth,
   onOverlayActiveChange,
   resizable = false,
+  swipeReveal = false,
   width
 }: PaneProps) {
   const ctx = useContext(PaneShellContext)
   const paneStates = useStore($paneStates)
   const registered = useRef(false)
   const paneRef = useRef<HTMLDivElement | null>(null)
+  const revealSwipeRef = useRef<RevealSwipeStart | null>(null)
   // Keyboard (mod+b / mod+j) pins the reveal open while collapsed; hover is CSS.
   const [forced, setForced] = useState(false)
 
@@ -396,15 +457,82 @@ export function Pane({
     }
 
     const onToggle = (e: Event) => {
-      if ((e as CustomEvent<{ id: string }>).detail?.id === id) {
-        setForced(v => !v)
+      const detail = (e as CustomEvent<PaneRevealEventDetail>).detail
+
+      if (detail?.id !== id) {
+        if (detail?.action !== 'close') {
+          setForced(false)
+        }
+
+        return
       }
+
+      setForced(value => (detail.action === 'open' ? true : detail.action === 'close' ? false : !value))
     }
 
     window.addEventListener(PANE_TOGGLE_REVEAL_EVENT, onToggle)
 
     return () => window.removeEventListener(PANE_TOGGLE_REVEAL_EVENT, onToggle)
   }, [id, overlayActive])
+
+  const startRevealSwipe = useCallback((event: ReactPointerEvent<HTMLDivElement>, open: boolean) => {
+    if (event.pointerType !== 'touch') {
+      return
+    }
+
+    revealSwipeRef.current = {
+      open,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY
+    }
+    capturePointer(event.currentTarget, event.pointerId)
+  }, [])
+
+  const moveRevealSwipe = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = revealSwipeRef.current
+
+    if (!start || start.pointerId !== event.pointerId) {
+      return
+    }
+
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+
+    if (Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      event.preventDefault()
+    }
+  }, [])
+
+  const finishRevealSwipe = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const start = revealSwipeRef.current
+
+      if (!start || start.pointerId !== event.pointerId) {
+        return
+      }
+
+      revealSwipeRef.current = null
+      releasePointer(event.currentTarget, event.pointerId)
+
+      const action = paneRevealActionForSwipe(side, start.open, event.clientX - start.x, event.clientY - start.y)
+
+      if (action) {
+        event.preventDefault()
+        window.dispatchEvent(
+          new CustomEvent<PaneRevealEventDetail>(PANE_TOGGLE_REVEAL_EVENT, { detail: { action, id } })
+        )
+      }
+    },
+    [id, side]
+  )
+
+  const cancelRevealSwipe = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (revealSwipeRef.current?.pointerId === event.pointerId) {
+      revealSwipeRef.current = null
+      releasePointer(event.currentTarget, event.pointerId)
+    }
+  }, [])
 
   // Keep contents mounted while collapsed so reveal is a pure CSS transform.
   useEffect(() => {
@@ -502,9 +630,20 @@ export function Pane({
       >
         <div
           aria-hidden="true"
-          className="pointer-events-auto absolute inset-y-0 z-30 [-webkit-app-region:no-drag]"
+          className={cn(
+            'pointer-events-auto absolute inset-y-0 z-30 w-[14px] [-webkit-app-region:no-drag]',
+            side === 'left' ? 'left-(--pane-reveal-edge-gutter)' : 'right-(--pane-reveal-edge-gutter)',
+            swipeReveal &&
+              (side === 'left'
+                ? 'max-[768px]:left-0 max-[768px]:w-8 max-[768px]:touch-pan-y'
+                : 'max-[768px]:right-0 max-[768px]:w-8 max-[768px]:touch-pan-y')
+          )}
           data-pane-reveal-trigger=""
-          style={{ [edge]: HOVER_REVEAL_EDGE_GUTTER, width: HOVER_REVEAL_TRIGGER_WIDTH }}
+          onPointerCancel={swipeReveal ? cancelRevealSwipe : undefined}
+          onPointerDown={swipeReveal ? event => startRevealSwipe(event, false) : undefined}
+          onPointerMove={swipeReveal ? moveRevealSwipe : undefined}
+          onPointerUp={swipeReveal ? finishRevealSwipe : undefined}
+          style={{ '--pane-reveal-edge-gutter': HOVER_REVEAL_EDGE_GUTTER } as CSSProperties}
         />
 
         {/* Keyed on side so flipping panes remounts off-screen on the new edge
@@ -514,9 +653,14 @@ export function Pane({
             'pointer-events-none absolute inset-y-0 z-30 overflow-hidden transition-transform delay-0',
             offscreen,
             'group-hover/reveal:pointer-events-auto group-hover/reveal:translate-x-0 group-hover/reveal:delay-[var(--reveal-enter-delay)] group-hover/reveal:shadow-[var(--reveal-shadow)]',
-            'group-data-[forced]/reveal:pointer-events-auto group-data-[forced]/reveal:translate-x-0 group-data-[forced]/reveal:delay-0 group-data-[forced]/reveal:shadow-[var(--reveal-shadow)]'
+            'group-data-[forced]/reveal:pointer-events-auto group-data-[forced]/reveal:translate-x-0 group-data-[forced]/reveal:delay-0 group-data-[forced]/reveal:shadow-[var(--reveal-shadow)]',
+            forced && 'touch-pan-y'
           )}
           key={edge}
+          onPointerCancel={forced ? cancelRevealSwipe : undefined}
+          onPointerDown={forced ? event => startRevealSwipe(event, true) : undefined}
+          onPointerMove={forced ? moveRevealSwipe : undefined}
+          onPointerUp={forced ? finishRevealSwipe : undefined}
           style={
             {
               [edge]: 0,

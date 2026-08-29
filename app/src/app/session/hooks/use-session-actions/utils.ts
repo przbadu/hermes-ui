@@ -7,6 +7,7 @@ import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/p
 import {
   $currentCwd,
   $sessions,
+  rememberedSessionProfile,
   setCurrentBranch,
   setCurrentCwd,
   setCurrentFastMode,
@@ -16,6 +17,7 @@ import {
   setCurrentReasoningEffort,
   setCurrentServiceTier,
   setCurrentUsage,
+  setSessionProfileHint,
   setSessions,
   setYoloActive
 } from '@/store/session'
@@ -206,44 +208,84 @@ function upsertResolvedSession(session: SessionInfo, storedSessionId: string) {
 }
 
 export async function resolveStoredSession(storedSessionId: string): Promise<SessionInfo | undefined> {
+  const hintedProfile = rememberedSessionProfile(storedSessionId)
   const cached = $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
 
-  if (cached) {
-    return cached
+  if (cached && (!hintedProfile || normalizeProfileKey(cached.profile) === normalizeProfileKey(hintedProfile))) {
+    const resolved = hintedProfile && !cached.profile ? { ...cached, profile: hintedProfile } : cached
+
+    if (resolved.profile) {
+      setSessionProfileHint(storedSessionId, resolved.profile)
+    }
+
+    return resolved
   }
 
-  // Direct by-id on the live backend — one row lookup, no list scan. Covers
-  // single-profile users and any id on the active profile (e.g. an old session
-  // past the sidebar's recent window). 404 just means it's not on this profile.
-  try {
-    const session = await getSession(storedSessionId)
+  const resolveOnProfile = async (profile?: string): Promise<SessionInfo> => {
+    const found = await getSession(storedSessionId, profile)
+    const session = profile && !found.profile ? { ...found, profile } : found
 
     upsertResolvedSession(session, storedSessionId)
 
+    if (session.profile) {
+      setSessionProfileHint(storedSessionId, session.profile)
+    }
+
     return session
-  } catch {
-    // Not on the active profile — fall through to the cross-profile probe.
   }
 
-  // Multi-profile only: probe each other profile by id (still one cheap lookup
-  // each) rather than pulling every profile's recent sessions. The first hit
-  // carries its owning `profile`, which routes the resume to the right backend.
-  const activeKey = normalizeProfileKey($activeGatewayProfile.get())
+  // An explicit plugin owner is authoritative. Query it before the unscoped
+  // REST endpoint, which is served by the primary/default backend even after
+  // the renderer has activated another profile's WebSocket.
+  if (hintedProfile) {
+    try {
+      return await resolveOnProfile(hintedProfile)
+    } catch {
+      // A stale hint can outlive a moved/deleted session; probe the roster.
+    }
+  } else {
+    // Fast path for the primary profile and single-profile installs.
+    try {
+      return await resolveOnProfile()
+    } catch {
+      // Not on the primary profile — fall through to explicit profile probes.
+    }
+  }
 
-  const otherProfiles = $profiles
+  // Probe every known profile explicitly. Do not exclude
+  // $activeGatewayProfile: that atom follows the active socket, while an
+  // unscoped REST request still reads the primary/default state.db in the web
+  // bridge. Excluding it is what made hidden Bot Chats fall back to #/.
+  const attempted = new Set(hintedProfile ? [normalizeProfileKey(hintedProfile)] : [])
+
+  const profiles = $profiles
     .get()
     .map(profile => normalizeProfileKey(profile.name))
-    .filter(key => key !== activeKey)
+    .filter(profile => {
+      if (attempted.has(profile)) {
+        return false
+      }
 
-  for (const profile of otherProfiles) {
+      attempted.add(profile)
+
+      return true
+    })
+
+  for (const profile of profiles) {
     try {
-      const session = await getSession(storedSessionId, profile)
-
-      upsertResolvedSession(session, storedSessionId)
-
-      return session
+      return await resolveOnProfile(profile)
     } catch {
       // Not on this profile; try the next.
+    }
+  }
+
+  // Profiles can still be loading during a cold route. Preserve the old
+  // unscoped fallback after the authoritative/known-profile attempts.
+  if (hintedProfile) {
+    try {
+      return await resolveOnProfile()
+    } catch {
+      // The caller will retain the owner hint for its resume RPC below.
     }
   }
 

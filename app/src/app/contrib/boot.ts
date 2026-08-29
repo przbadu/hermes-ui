@@ -10,4 +10,8 @@
 
 import { discoverBundledPlugins } from '@/contrib/plugins'
 
+import { registerCoreLayoutContributions, watchLayoutContributions } from './layout'
+
+registerCoreLayoutContributions()
 discoverBundledPlugins()
+watchLayoutContributions()

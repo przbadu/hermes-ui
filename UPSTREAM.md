@@ -36,8 +36,7 @@ Full re-sync was staged. This sync landed the self-contained perf/fix/feature im
 
 **Deferred to a follow-up (PR2) - do NOT assume these are synced:**
 - The `contrib`/plugin system that absorbed `desktop-controller`, `app-shell`, and `keybind-panel` (these files are kept in their pre-refactor web-adapted form here).
-- The `components/pane-shell/tree/*` layout-engine rewrite (this repo still uses the pre-tree `pane-shell`).
-- The `store/session-states` extraction and the expanded `store/session` API that depends on it.
+- The session-tab lifecycle and expanded `store/session` API. The layout port below includes only the compatibility surface needed by the tree renderer.
 - The expanded `types/hermes.ts` / `global.d.ts` surface: `cloud` gateway mode + custom endpoints, terminal-backend picker, worktree base-branch, per-job cron model. These require matching `web-bridge` work.
 - The `@assistant-ui/react` 0.12 -> 0.14 (+ `react-streamdown` 0.1 -> 0.3) major upgrade, which the new markdown/runtime code needs.
 - **Billing** (`app/settings/billing/*`, `shared/billing-*`, `charge-settlement`): intentionally excluded from the web build per project decision; skip on future syncs unless that decision changes.
@@ -58,10 +57,20 @@ The general watermark above is unchanged - only the files below track `v2026.8.1
 **Web-adapted (documented in-file):**
 - `contrib/plugin.ts`: `ctx.socket` is a no-op disposer, `ctx.os.notify`/`revealPath` are inert, `ctx.rest` rides the web bridge `api` (no multipart `upload` yet).
 - `contrib/plugins.ts`: bundled discovery only - the disk-door `runtime-loader` is omitted (needs desktop fs watchers).
-- `sdk/index.ts` (`@hermes/plugin-sdk` alias): web host - single-connection (no `agents`/`connections`/`ensureAgent`/`requestProfile`/`openWorkspace`), no `SkillsView`/`McpTab`/`ToolsetConfigPanel` exports (the web versions lack `fixedProfile` scoping; plugins use their profile-correct staged fallbacks), `paneVisibility` backed by the pane host below.
-- `app/contrib/pane-host.tsx` (new, web-only): maps `area: 'panes'` contributions onto the fixed shell instead of the tree engine - sessions-docked panes become a SESSIONS | BOTS sidebar tab strip, workspace/right panes become right-edge `<Pane>`s.
+- `sdk/index.ts` (`@hermes/plugin-sdk` alias): web host - single-connection (no `agents`/`connections`/`ensureAgent`/`requestProfile`/`openWorkspace`), no `SkillsView`/`McpTab`/`ToolsetConfigPanel` exports (the web versions lack `fixedProfile` scoping; plugins use their profile-correct staged fallbacks). Its temporary pane-host visibility adapter was superseded by the layout port below.
+- `app/contrib/pane-host.tsx` (new, web-only at the time): mapped pane contributions onto the fixed shell. It was removed when the Desktop tree engine was ported below.
 - `store/gateway.ts`: added `retireProfileGateway` (upstream `retireLocalProfileGateways` analog) so a profile delete can't be resurrected by its own socket (upstream #52279).
 
 **Seams cut into existing files:** composer submit middleware (`runComposerMiddleware` in `app/chat/composer/index.tsx`), contributed `@` completion sources (`hooks/use-at-completions.ts`), contributed palette rows (`app/command-palette/index.tsx`), plugin boot + right panes (`app/desktop-controller.tsx`), sidebar tab strip (`app/chat/sidebar/index.tsx`), `pluginRest` (`hermes.ts`), plugin i18n re-exports (`i18n/index.ts`).
 
-**Still deferred (on top of the PR2 list):** the tree layout engine, `Settings > Plugins` page (plugins can only be toggled via the persisted `hermes.desktop.pluginDecisions.v2` storage key for now), `contrib/runtime-loader.ts`, `store/composer-actions` + composer micro-actions, `blobatarSvg` avatars (not present upstream at this tag either - the plugin's classic-shapes fallback renders).
+**Still deferred (on top of the PR2 list):** `Settings > Plugins` page (plugins can only be toggled via the persisted `hermes.desktop.pluginDecisions.v2` storage key for now), `contrib/runtime-loader.ts`, `store/composer-actions` + composer micro-actions, `blobatarSvg` avatars (not present upstream at this tag either - the plugin's classic-shapes fallback renders).
+
+### 2026-08-28 - Desktop layout engine and editor port (PR #37)
+
+This scoped sync ports the production layout system from Hermes Desktop at `6da0ae1cf5a37898a046b644cf23f9fe67baba22`. It supersedes the fixed-shell pane host and the temporary web-only layout picker.
+
+**Ported from `apps/desktop/src`:** the tree model/store/renderer, grid editor and conversions, preset layout picker, edit mode, pane lifecycle/visibility, tab-strip preferences, pointer/drag helpers, and the current Default, Focus, Terminal deck, and Quad presets. Contributed panes now use the same layout registry and visibility state as Desktop.
+
+**Web adaptations:** Desktop's tree remains the single layout model. At narrow widths, collapsible left and right zones render as touch drawers with edge-swipe navigation and backdrop dismissal; this responsive presentation does not introduce separate mobile presets or state. Drawer navigation closes the whole active zone (including the Bots tab), and dynamic plugin panes are re-adopted from their Desktop dock hints instead of stale preset placeholders. The web bridge also retains Desktop's explicit session-owner hint when a hidden Bot Chat opens, so its REST and resume calls stay on the owning profile. Electron-only session-tile cleanup is represented by a documented no-op compatibility function until session tabs are ported.
+
+**Still deferred:** the remaining contrib/controller refactor, full session-tab lifecycle, expanded bridge surfaces, dependency major upgrades, plugin settings/runtime loading, and Billing.

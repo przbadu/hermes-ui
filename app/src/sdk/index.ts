@@ -20,15 +20,17 @@
  *    so rendering them inside a plugin dialog would read/write the ACTIVE
  *    profile instead of the plugin's target. Plugins keep their own staged
  *    fallbacks, which route every RPC through an explicit `profile` param.
- *  - `host.paneVisibility` is backed by the web pane host (sidebar tab state)
+ *  - `host.paneVisibility` is backed by the shared Desktop layout tree
  *    instead of the layout tree — same semantics: "holding its zone's active
  *    tab slot".
  */
 
 import { atom, type ReadableAtom } from 'nanostores'
 
-import { $paneVisible } from '@/app/contrib/pane-host'
+import { PANES_AREA } from '@/app/contrib/layout'
 import { sessionRoute } from '@/app/routes'
+import { dismissMobileChatSidebar } from '@/app/shell/mobile-pane-navigation'
+import { $paneVisible } from '@/components/pane-shell/tree/store'
 import { deleteProfile as deleteProfileRest, getLogs, getStatus, type HermesGateway } from '@/hermes'
 import { $gateway, openGatewayForProfile, retireProfileGateway } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
@@ -48,7 +50,8 @@ import {
   $busy,
   $currentCwd,
   $currentModel,
-  $gatewayState
+  $gatewayState,
+  setSessionProfileHint
 } from '@/store/session'
 import { runGatewayRestart } from '@/store/system-actions'
 
@@ -69,9 +72,8 @@ export interface ViewportRect {
   narrow: boolean
 }
 
-// Mirrors the app's sidebar-collapse breakpoint (upstream reads the tree
-// store's $narrowViewport; the web shell has no tree store, so the media
-// query is evaluated here directly).
+// Mirrors the app's sidebar-collapse breakpoint. The SDK evaluates the media
+// query directly so this readonly surface stays independent of renderer state.
 const NARROW_MEDIA_QUERY = '(max-width: 64rem)'
 
 const readViewport = (): ViewportRect => ({
@@ -125,6 +127,7 @@ export const host = {
 
   /** Navigate the app router (hash routes, e.g. '/skills'). */
   navigate: (path: string) => {
+    dismissMobileChatSidebar()
     window.location.hash = path.startsWith('#') ? path : `#${path}`
   },
 
@@ -189,6 +192,15 @@ export const host = {
   ): Promise<void> => {
     const profile = (options.profile ?? '').trim()
 
+    dismissMobileChatSidebar()
+
+    // Match Desktop's owner-hint behavior. Bot Mode's canonical chats are
+    // deliberately hidden from $sessions, so this explicit profile is the
+    // routing authority when the session route resumes below.
+    if (profile) {
+      setSessionProfileHint(storedSessionId, profile)
+    }
+
     if (profile && profile !== $activeGatewayProfile.get()) {
       await ensureGatewayProfile(profile)
 
@@ -204,6 +216,7 @@ export const host = {
   /** Start a fresh chat draft, optionally pointed at another profile (its
    *  backend spins up in the background). */
   newChat: (profile?: null | string): void => {
+    dismissMobileChatSidebar()
     newSessionInProfile((profile ?? '').trim() || $activeGatewayProfile.get())
     window.location.hash = '#/'
   },
@@ -253,7 +266,7 @@ export {
   type ComposerMiddleware
 } from '@/app/chat/composer/contrib'
 export { PALETTE_AREA, type PaletteContribution } from '@/app/command-palette/contrib'
-export { PANES_AREA } from '@/app/contrib/pane-host'
+export { PANES_AREA }
 
 // -- ui: the design language --------------------------------------------------
 

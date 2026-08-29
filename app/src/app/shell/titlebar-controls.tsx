@@ -1,12 +1,14 @@
 import { useStore } from '@nanostores/react'
-import type { ComponentProps, ReactNode } from 'react'
+import { type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
+import { toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
+import { resetLayoutTree } from '@/components/pane-shell/tree/store'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
-import { matchesQuery } from '@/hooks/use-media-query'
+import { matchesQuery, useMediaQuery } from '@/hooks/use-media-query'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
@@ -37,7 +39,7 @@ export interface TitlebarTool {
   hidden?: boolean
   href?: string
   icon: ReactNode
-  onSelect?: () => void
+  onSelect?: (event?: MouseEvent<HTMLButtonElement>) => void
   title?: string
   to?: string
 }
@@ -59,6 +61,8 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const fileBrowserOpen = useStore($fileBrowserOpen)
   const sidebarOpen = useStore($sidebarOpen)
   const panesFlipped = useStore($panesFlipped)
+  const narrowViewport = useMediaQuery(SIDEBAR_COLLAPSE_MEDIA_QUERY)
+  const sidebarSide = narrowViewport || !panesFlipped ? 'left' : 'right'
 
   const toggleHaptics = () => {
     if (!hapticsMuted) {
@@ -92,8 +96,8 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
   const fileBrowserEdge = { open: fileBrowserOpen, toggle: edgeToggle(FILE_BROWSER_PANE_ID, toggleFileBrowserOpen) }
   const sessionsEdge = { open: sidebarOpen, toggle: edgeToggle(CHAT_SIDEBAR_PANE_ID, toggleSidebarOpen) }
-  const leftEdge = panesFlipped ? fileBrowserEdge : sessionsEdge
-  const rightEdge = panesFlipped ? sessionsEdge : fileBrowserEdge
+  const leftEdge = sidebarSide === 'left' ? sessionsEdge : fileBrowserEdge
+  const rightEdge = sidebarSide === 'left' ? fileBrowserEdge : sessionsEdge
 
   const leftToolbarTools: TitlebarTool[] = [
     {
@@ -106,6 +110,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
       }
     },
     {
+      hidden: narrowViewport,
       icon: <Codicon name="arrow-swap" />,
       id: 'flip-panes',
       label: t.titlebar.swapSidebarSides,
@@ -130,6 +135,23 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
   // Static system tools — always pinned to the screen's right edge.
   const systemTools: TitlebarTool[] = [
+    {
+      icon: <Codicon name="layout" />,
+      id: 'layout',
+      label: t.titlebar.layoutEditor,
+      onSelect: event => {
+        if (event?.metaKey || event?.ctrlKey) {
+          triggerHaptic('warning')
+          resetLayoutTree()
+
+          return
+        }
+
+        triggerHaptic('open')
+        toggleLayoutEditMode()
+      },
+      title: t.titlebar.layoutEditorTitle
+    },
     {
       active: hapticsMuted,
       icon: <Codicon name={hapticsMuted ? 'mute' : 'unmute'} />,
@@ -247,12 +269,12 @@ function TitlebarToolButton({ navigate, tool }: { navigate: ReturnType<typeof us
         aria-pressed={tool.active ?? undefined}
         className={className}
         disabled={tool.disabled}
-        onClick={() => {
+        onClick={event => {
           if (tool.to) {
             navigate(tool.to)
           }
 
-          tool.onSelect?.()
+          tool.onSelect?.(event)
         }}
         onPointerDown={event => event.stopPropagation()}
         size="icon-titlebar"

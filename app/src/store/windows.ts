@@ -48,6 +48,15 @@ export function isNewSessionWindow(): boolean {
   return result
 }
 
+/** True for the Desktop in-app browser pop-out. Web builds normally return false. */
+export function isBrowserWindow(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('win') === 'browser'
+  } catch {
+    return false
+  }
+}
+
 let watchWindowCache: boolean | null = null
 
 // A "watch" window spectates a session that is being driven elsewhere (a
