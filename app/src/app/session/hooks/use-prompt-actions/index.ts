@@ -697,7 +697,8 @@ export function usePromptActions({
           {
             session_id: activeSessionId,
             text: userText,
-            truncate_before_user_ordinal: truncateBeforeUserOrdinal
+            truncate_before_user_ordinal: truncateBeforeUserOrdinal,
+            confirm_truncate: true
           },
           PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
         )
@@ -738,7 +739,10 @@ export function usePromptActions({
           {
             session_id: sessionId,
             text,
-            ...(truncateOrdinal !== undefined && { truncate_before_user_ordinal: truncateOrdinal })
+            ...(truncateOrdinal !== undefined && {
+              truncate_before_user_ordinal: truncateOrdinal,
+              confirm_truncate: true
+            })
           },
           PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
         )
