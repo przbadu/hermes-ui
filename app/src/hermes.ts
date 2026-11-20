@@ -54,7 +54,11 @@ import type {
   StatusResponse,
   ToolsetConfig,
   ToolsetInfo,
-  ToolsetModelsResponse
+  ToolsetModelsResponse,
+  WebhookCreatePayload,
+  WebhookCreateResponse,
+  WebhookEnableResponse,
+  WebhooksResponse
 } from '@/types/hermes'
 
 // Desktop startup fires a burst of read-only data calls (config, profiles,
@@ -164,7 +168,13 @@ export type {
   ToolsetConfig,
   ToolsetInfo,
   ToolsetModel,
-  ToolsetModelsResponse
+  ToolsetModelsResponse,
+  WebhookCreatePayload,
+  WebhookCreateResponse,
+  WebhookEnableResponse,
+  WebhookRoute,
+  WebhookSignature,
+  WebhooksResponse
 } from '@/types/hermes'
 
 export class HermesGateway extends JsonRpcGatewayClient {
@@ -1249,5 +1259,61 @@ export function runDebugShare(): Promise<DebugShareResponse> {
     body: {},
     // Synchronous upload of report + logs to the paste service.
     timeoutMs: 120_000
+  })
+}
+
+// -- Webhooks (subscription CRUD) ---------------------------------------------
+// The webhook receiver is its own gateway platform; subscriptions live in a
+// shared JSON store the CLI/dashboard also drive. Enabling mutates config and
+// best-effort restarts the gateway; subscription changes hot-reload.
+
+/** `profile` = the backend owner a caller captured at mount; omitted → the
+ *  ambient request scope. Keyed explicitly so a view that survives a live
+ *  profile switch keeps talking to the profile it belongs to. */
+function withProfile(path: string, profile?: null | string): string {
+  const key = profile?.trim()
+
+  if (!key || key === 'default') {
+    return path
+  }
+
+  return `${path}${path.includes('?') ? '&' : '?'}profile=${encodeURIComponent(key)}`
+}
+
+export function getWebhooks(profile?: null | string): Promise<WebhooksResponse> {
+  return window.hermesDesktop.api<WebhooksResponse>({ path: withProfile('/api/webhooks', profile) })
+}
+
+export function enableWebhooks(profile?: null | string): Promise<WebhookEnableResponse> {
+  return window.hermesDesktop.api<WebhookEnableResponse>({
+    path: withProfile('/api/webhooks/enable', profile),
+    method: 'POST'
+  })
+}
+
+export function createWebhook(body: WebhookCreatePayload, profile?: null | string): Promise<WebhookCreateResponse> {
+  return window.hermesDesktop.api<WebhookCreateResponse>({
+    path: withProfile('/api/webhooks', profile),
+    method: 'POST',
+    body
+  })
+}
+
+export function deleteWebhook(name: string, profile?: null | string): Promise<{ ok: boolean }> {
+  return window.hermesDesktop.api<{ ok: boolean }>({
+    path: withProfile(`/api/webhooks/${encodeURIComponent(name)}`, profile),
+    method: 'DELETE'
+  })
+}
+
+export function setWebhookEnabled(
+  name: string,
+  enabled: boolean,
+  profile?: null | string
+): Promise<{ enabled: boolean; name: string; ok: boolean }> {
+  return window.hermesDesktop.api<{ enabled: boolean; name: string; ok: boolean }>({
+    path: withProfile(`/api/webhooks/${encodeURIComponent(name)}/enabled`, profile),
+    method: 'PUT',
+    body: { enabled }
   })
 }

@@ -6,7 +6,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { getHermesConfigDefaults, getHermesConfigRecord, saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Bell, Download, Globe, Info, KeyRound, RefreshCw, Settings2, Upload, Wrench, Zap } from '@/lib/icons'
+import { Archive, Bell, Download, Globe, Info, Keyboard, KeyRound, RefreshCw, Settings2, Upload, Wrench, Zap } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -20,6 +20,7 @@ import { AppearanceSettings } from './appearance-settings'
 import { ConfigSettings } from './config-settings'
 import { SECTIONS } from './constants'
 import { GatewaySettings } from './gateway-settings'
+import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { NotificationsSettings } from './notifications-settings'
 import { PROVIDER_VIEWS, ProvidersSettings, type ProviderView } from './providers-settings'
@@ -31,6 +32,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'providers',
   'gateway',
   'keys',
+  'keybinds',
   'notifications',
   'sessions',
   'about'
@@ -187,6 +189,13 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
       onSelect: () => setActiveView('keys')
     },
     {
+      active: activeView === 'keybinds',
+      icon: Keyboard,
+      id: 'keybinds',
+      label: t.keybinds.title,
+      onSelect: () => setActiveView('keybinds')
+    },
+    {
       active: activeView === 'sessions',
       icon: Archive,
       id: 'sessions',
@@ -257,6 +266,8 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
             <ProvidersSettings onClose={onClose} onViewChange={setProviderView} view={providerView} />
           ) : activeView === 'keys' ? (
             <KeysSettings view={keysView} />
+          ) : activeView === 'keybinds' ? (
+            <KeybindSettings />
           ) : activeView === 'notifications' ? (
             <NotificationsSettings />
           ) : (
